@@ -9,6 +9,7 @@ import {
   getStorageQuota,
   getDriveStats,
   getRecentFiles,
+  getFolderContents,
 } from '../controllers/googleDriveController';
 import { authenticate } from '../middleware/authMiddleware';
 
@@ -20,6 +21,7 @@ router.post('/callback', authenticate, handleCallback);
 router.post('/folder', authenticate, saveFolder);
 router.get('/folders/:projectId', authenticate, listFolders);
 router.get('/:projectId/files', authenticate, listFiles);
+router.get('/:projectId/folder/:folderId/contents', authenticate, getFolderContents);
 router.get('/:projectId/quota', authenticate, getStorageQuota);
 router.get('/:projectId/stats', authenticate, getDriveStats);
 router.get('/:projectId/recent', authenticate, getRecentFiles);

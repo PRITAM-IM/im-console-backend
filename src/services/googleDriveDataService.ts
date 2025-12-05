@@ -107,6 +107,55 @@ class GoogleDriveDataService {
     return googleDriveAuthService.listFolders(accessToken);
   }
 
+  public async getFolderContents(projectId: string, folderId: string): Promise<{ folders: DriveFolder[]; files: DriveFile[] }> {
+    const accessToken = await this.getAccessToken(projectId);
+    
+    googleDriveOauth2Client.setCredentials({ access_token: accessToken });
+    const drive = google.drive('v3');
+    
+    console.log(`[Google Drive Data Service] Fetching contents for folder: ${folderId}`);
+    
+    // Fetch subfolders
+    const foldersResponse = await drive.files.list({
+      auth: googleDriveOauth2Client,
+      q: `'${folderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name, webViewLink, modifiedTime)',
+      pageSize: 100,
+      orderBy: 'name',
+    });
+    
+    const folders: DriveFolder[] = (foldersResponse.data.files || []).map(file => ({
+      id: file.id || '',
+      name: file.name || 'Untitled',
+      webViewLink: file.webViewLink || undefined,
+    }));
+    
+    // Fetch files (non-folders)
+    const filesResponse = await drive.files.list({
+      auth: googleDriveOauth2Client,
+      q: `'${folderId}' in parents and mimeType!='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name, mimeType, size, modifiedTime, createdTime, webViewLink, iconLink, thumbnailLink)',
+      pageSize: 100,
+      orderBy: 'name',
+    });
+    
+    const files: DriveFile[] = (filesResponse.data.files || []).map(file => ({
+      id: file.id || '',
+      name: file.name || 'Untitled',
+      mimeType: file.mimeType || '',
+      size: file.size || undefined,
+      modifiedTime: file.modifiedTime || undefined,
+      createdTime: file.createdTime || undefined,
+      webViewLink: file.webViewLink || undefined,
+      iconLink: file.iconLink || undefined,
+      thumbnailLink: file.thumbnailLink || undefined,
+    }));
+    
+    console.log(`[Google Drive Data Service] Found ${folders.length} subfolder(s) and ${files.length} file(s)`);
+    
+    return { folders, files };
+  }
+
   public async getRecentFiles(projectId: string, limit: number = 10): Promise<DriveFile[]> {
     const accessToken = await this.getAccessToken(projectId);
     

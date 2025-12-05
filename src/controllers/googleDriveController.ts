@@ -225,6 +225,24 @@ export const getRecentFiles = async (req: Request, res: Response): Promise<void>
   }
 };
 
+export const getFolderContents = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { projectId, folderId } = req.params;
+
+    if (!projectId || !folderId) {
+      res.status(400).json({ success: false, error: 'Project ID and Folder ID are required' });
+      return;
+    }
+
+    const contents = await googleDriveDataService.getFolderContents(projectId, folderId);
+    
+    res.json({ success: true, data: contents });
+  } catch (error: any) {
+    console.error('[Google Drive Controller] Error getting folder contents:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 
 
 
