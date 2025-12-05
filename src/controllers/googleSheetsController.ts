@@ -199,6 +199,48 @@ export const getSheetValues = async (req: Request, res: Response): Promise<void>
   }
 };
 
+export const updateRowValues = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { projectId } = req.params;
+    const { spreadsheetId, sheetName, rowIndex, values } = req.body;
+
+    if (!projectId || !sheetName || rowIndex === undefined || !values) {
+      res.status(400).json({ 
+        success: false, 
+        error: 'Project ID, sheet name, row index, and values are required' 
+      });
+      return;
+    }
+
+    const project = await Project.findById(projectId);
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Project not found' });
+      return;
+    }
+
+    const sheetId = spreadsheetId || project.googleSheetId;
+    if (!sheetId) {
+      res.status(400).json({ success: false, error: 'No spreadsheet connected' });
+      return;
+    }
+
+    await googleSheetsDataService.updateRowValues(
+      projectId,
+      sheetId,
+      sheetName,
+      rowIndex,
+      values
+    );
+    
+    console.log(`[Google Sheets Controller] Updated row ${rowIndex} in sheet ${sheetName}`);
+    
+    res.json({ success: true, message: 'Row updated successfully' });
+  } catch (error: any) {
+    console.error('[Google Sheets Controller] Error updating row values:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 
 
 

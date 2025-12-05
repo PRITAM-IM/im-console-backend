@@ -7,6 +7,7 @@ import {
   listSpreadsheets,
   getSpreadsheetDetails,
   getSheetValues,
+  updateRowValues,
 } from '../controllers/googleSheetsController';
 import { authenticate } from '../middleware/authMiddleware';
 
@@ -19,6 +20,7 @@ router.post('/spreadsheet', authenticate, saveSpreadsheet);
 router.get('/spreadsheets/:projectId', authenticate, listSpreadsheets);
 router.get('/:projectId/details', authenticate, getSpreadsheetDetails);
 router.get('/:projectId/values', authenticate, getSheetValues);
+router.post('/:projectId/update-row', authenticate, updateRowValues);
 
 export default router;
 

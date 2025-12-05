@@ -115,32 +115,45 @@ class GoogleDriveAuthService implements IGoogleDriveAuthService {
 
   public async listFolders(accessToken: string): Promise<DriveFolder[]> {
     try {
-      console.log('[Google Drive Auth Service] Fetching folders...');
+      console.log('[Google Drive Auth Service] Fetching all folders with pagination...');
       
       const drive = google.drive('v3');
       googleDriveOauth2Client.setCredentials({ access_token: accessToken });
       
-      const response = await drive.files.list({
-        auth: googleDriveOauth2Client,
-        q: "mimeType='application/vnd.google-apps.folder'",
-        fields: 'files(id, name, webViewLink)',
-        pageSize: 50,
-        orderBy: 'modifiedTime desc',
-      });
-
       const folders: DriveFolder[] = [];
+      let pageToken: string | undefined = undefined;
+      let pageCount = 0;
+      
+      // Keep fetching pages until there are no more results
+      do {
+        pageCount++;
+        console.log(`[Google Drive Auth Service] Fetching page ${pageCount}...`);
+        
+        const response: any = await drive.files.list({
+          auth: googleDriveOauth2Client,
+          q: "mimeType='application/vnd.google-apps.folder' and trashed=false",
+          fields: 'nextPageToken, files(id, name, webViewLink)',
+          pageSize: 100, // Maximum allowed by API
+          orderBy: 'modifiedTime desc',
+          pageToken: pageToken,
+        });
 
-      if (response.data.files) {
-        for (const file of response.data.files) {
-          folders.push({
-            id: file.id || '',
-            name: file.name || 'Untitled',
-            webViewLink: file.webViewLink || undefined,
-          });
+        if (response.data.files) {
+          for (const file of response.data.files) {
+            folders.push({
+              id: file.id || '',
+              name: file.name || 'Untitled',
+              webViewLink: file.webViewLink || undefined,
+            });
+          }
         }
-      }
+        
+        // Get the next page token
+        pageToken = response.data.nextPageToken || undefined;
+        
+      } while (pageToken); // Continue if there's a next page
 
-      console.log(`[Google Drive Auth Service] Found ${folders.length} folder(s)`);
+      console.log(`[Google Drive Auth Service] Found ${folders.length} folder(s) across ${pageCount} page(s)`);
       return folders;
     } catch (error: any) {
       console.error('[Google Drive Auth Service] Error fetching folders:', error.message);

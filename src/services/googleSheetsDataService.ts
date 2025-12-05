@@ -109,6 +109,107 @@ class GoogleSheetsDataService {
     const accessToken = await this.getAccessToken(projectId);
     return googleSheetsAuthService.listSpreadsheets(accessToken);
   }
+
+  public async updateCellValue(
+    projectId: string,
+    spreadsheetId: string,
+    range: string,
+    value: any
+  ): Promise<void> {
+    const accessToken = await this.getAccessToken(projectId);
+    
+    googleSheetsOauth2Client.setCredentials({ access_token: accessToken });
+    const sheets = google.sheets('v4');
+    
+    await sheets.spreadsheets.values.update({
+      auth: googleSheetsOauth2Client,
+      spreadsheetId,
+      range,
+      valueInputOption: 'RAW',
+      requestBody: {
+        values: [[value]],
+      },
+    });
+  }
+
+  public async updateRowValues(
+    projectId: string,
+    spreadsheetId: string,
+    sheetName: string,
+    rowIndex: number,
+    values: { [columnName: string]: any }
+  ): Promise<void> {
+    const accessToken = await this.getAccessToken(projectId);
+    
+    googleSheetsOauth2Client.setCredentials({ access_token: accessToken });
+    const sheets = google.sheets('v4');
+
+    // Get header row to find column indices
+    const headerRange = `${sheetName}!1:1`;
+    const headerResponse = await sheets.spreadsheets.values.get({
+      auth: googleSheetsOauth2Client,
+      spreadsheetId,
+      range: headerRange,
+    });
+
+    const headers = headerResponse.data.values?.[0] || [];
+    
+    // Prepare batch update requests
+    const updateRequests: any[] = [];
+    
+    for (const [columnName, value] of Object.entries(values)) {
+      let columnIndex = headers.findIndex(
+        (h: string) => h.toLowerCase() === columnName.toLowerCase()
+      );
+
+      // If column doesn't exist, add it
+      if (columnIndex === -1) {
+        headers.push(columnName);
+        columnIndex = headers.length - 1;
+        
+        // Update header row
+        await sheets.spreadsheets.values.update({
+          auth: googleSheetsOauth2Client,
+          spreadsheetId,
+          range: headerRange,
+          valueInputOption: 'RAW',
+          requestBody: {
+            values: [headers],
+          },
+        });
+      }
+
+      // Convert column index to letter (A, B, C, etc.)
+      const columnLetter = this.columnIndexToLetter(columnIndex);
+      const cellRange = `${sheetName}!${columnLetter}${rowIndex + 1}`;
+      
+      updateRequests.push({
+        range: cellRange,
+        values: [[value]],
+      });
+    }
+
+    // Batch update all cells
+    if (updateRequests.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        auth: googleSheetsOauth2Client,
+        spreadsheetId,
+        requestBody: {
+          valueInputOption: 'RAW',
+          data: updateRequests,
+        },
+      });
+    }
+  }
+
+  private columnIndexToLetter(index: number): string {
+    let letter = '';
+    while (index >= 0) {
+      letter = String.fromCharCode((index % 26) + 65) + letter;
+      index = Math.floor(index / 26) - 1;
+    }
+    return letter;
+  }
 }
 
 export default new GoogleSheetsDataService();
