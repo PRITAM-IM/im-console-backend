@@ -19,6 +19,7 @@ import instagramRoutes from './routes/instagramRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
 import linkedinRoutes from './routes/linkedinRoutes';
 import aiAnalysisRoutes from './routes/aiAnalysisRoutes';
+import formRoutes from './routes/formRoutes';
 
 // Import middleware
 import { errorHandler } from './middleware/errorMiddleware';
@@ -70,6 +71,7 @@ app.use('/api/instagram', instagramRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/linkedin', linkedinRoutes);
 app.use('/api/ai', aiAnalysisRoutes);
+app.use('/api', formRoutes); // Form routes (includes both /projects/:projectId/forms and /forms/:slug)
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
