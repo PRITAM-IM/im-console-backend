@@ -32,7 +32,9 @@ const allowedOrigins = [
   'http://127.0.0.1:5173',
   'http://localhost:5174',
   'http://127.0.0.1:5174',
-  'https://client-hotel-dashboard.vercel.app', // Production frontend
+  'https://client-hotel-dashboard.vercel.app', // Production frontend (default Vercel)
+  'https://hotelmoguls.com', // Custom domain
+  'https://www.hotelmoguls.com', // Custom domain with www
   process.env.FRONTEND_URL || '',
 ].filter(Boolean);
 
