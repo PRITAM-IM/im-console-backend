@@ -73,4 +73,6 @@ export const ENV = {
   OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || '',
   // Google Business Profile
   GOOGLE_BUSINESS_PROFILE_REDIRECT_URL: process.env.GOOGLE_BUSINESS_PROFILE_REDIRECT_URL || 'http://localhost:3000/api/google-business-profile/callback',
+  // Google Places API
+  GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY || '',
 };

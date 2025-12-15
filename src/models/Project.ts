@@ -13,6 +13,21 @@ export interface IProject extends Document {
   googleDriveFolderId?: string;
   linkedinPageId?: string;
   googleBusinessProfileLocationId?: string;
+  // Google Places API integration
+  googlePlacesId?: string;
+  googlePlacesData?: {
+    displayName?: string;
+    formattedAddress?: string;
+    rating?: number;
+    userRatingCount?: number;
+    websiteUri?: string;
+    phoneNumber?: string;
+    location?: {
+      latitude: number;
+      longitude: number;
+    };
+    lastUpdated?: Date;
+  };
   instagram?: {
     igUserId?: string;
     igUsername?: string;
@@ -79,6 +94,46 @@ const projectSchema: Schema<IProject> = new Schema(
     googleBusinessProfileLocationId: {
       type: String,
       trim: true,
+    },
+    // Google Places API integration
+    googlePlacesId: {
+      type: String,
+      trim: true,
+    },
+    googlePlacesData: {
+      displayName: {
+        type: String,
+        trim: true,
+      },
+      formattedAddress: {
+        type: String,
+        trim: true,
+      },
+      rating: {
+        type: Number,
+      },
+      userRatingCount: {
+        type: Number,
+      },
+      websiteUri: {
+        type: String,
+        trim: true,
+      },
+      phoneNumber: {
+        type: String,
+        trim: true,
+      },
+      location: {
+        latitude: {
+          type: Number,
+        },
+        longitude: {
+          type: Number,
+        },
+      },
+      lastUpdated: {
+        type: Date,
+      },
     },
     instagram: {
       igUserId: {
