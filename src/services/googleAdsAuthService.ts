@@ -142,13 +142,11 @@ class GoogleAdsAuthService implements IGoogleAdsAuthService {
         return [];
       }
 
-      // Step 1: List accessible customers using Google Ads API v22 REST endpoint (GET method)
-      const listCustomersUrl = 'https://googleads.googleapis.com/v22/customers:listAccessibleCustomers';
-      
-      console.log(`[Google Ads Auth Service] Calling: ${listCustomersUrl}`);
+      // Step 1: List accessible customers using Google Ads API REST endpoint
+      const listCustomersUrl = 'https://googleads.googleapis.com/v16/customers:listAccessibleCustomers';
       
       const listResponse = await fetch(listCustomersUrl, {
-        method: 'GET',  // CRITICAL: Must be GET for listAccessibleCustomers
+        method: 'GET',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'developer-token': ENV.GOOGLE_ADS_DEVELOPER_TOKEN,
@@ -183,8 +181,8 @@ class GoogleAdsAuthService implements IGoogleAdsAuthService {
           // Extract customer ID from resource name (format: "customers/1234567890")
           const customerId = resourceName.replace('customers/', '');
           
-          // Query customer details using Google Ads API v22 search endpoint
-          const searchUrl = `https://googleads.googleapis.com/v22/${resourceName}/googleAds:search`;
+          // Query customer details using Google Ads API search endpoint
+          const searchUrl = `https://googleads.googleapis.com/v16/${resourceName}/googleAds:search`;
           
           const query = `
             SELECT

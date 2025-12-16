@@ -6,6 +6,7 @@ import {
   saveGaProperty,
   getGA4Properties,
   testCallbackRoute,
+  disconnectGoogleAnalytics,
 } from '../controllers/googleController';
 import { authenticate } from '../middleware/authMiddleware';
 
@@ -17,5 +18,6 @@ router.get('/callback', handleCallbackGet); // GET route for OAuth redirect
 router.post('/callback', authenticate, handleCallback); // POST route for manual callback
 router.post('/property', authenticate, saveGaProperty);
 router.get('/properties/:projectId', authenticate, getGA4Properties);
+router.post('/disconnect', authenticate, disconnectGoogleAnalytics);
 
 export default router;

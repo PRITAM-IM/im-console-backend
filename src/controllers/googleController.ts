@@ -4,6 +4,8 @@ import gbpAuthService from '../services/gbpAuthService';
 import projectService from '../services/projectService';
 import asyncHandler from 'express-async-handler';
 import gaDataService from '../services/gaDataService';
+import Project from '../models/Project';
+import GAConnection from '../models/GAConnection';
 
 export const initiateAuth = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   try {
@@ -265,6 +267,54 @@ export const getGA4Properties = asyncHandler(async (req: Request, res: Response)
     res.status(200).json({
       success: true,
       data: properties,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+// Disconnect Google Analytics
+export const disconnectGoogleAnalytics = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { projectId } = req.body;
+
+  if (!projectId) {
+    res.status(400).json({
+      success: false,
+      error: 'Project ID is required',
+    });
+    return;
+  }
+
+  try {
+    // @ts-ignore
+    const userId = req.user._id.toString();
+
+    // Verify project belongs to user
+    const project = await projectService.getProjectById(projectId, userId);
+    if (!project) {
+      res.status(404).json({
+        success: false,
+        error: 'Project not found',
+      });
+      return;
+    }
+
+    // Delete the connection
+    await GAConnection.deleteMany({ projectId });
+
+    // Remove property ID from project
+    await Project.findByIdAndUpdate(projectId, {
+      $unset: { gaPropertyId: 1 }
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        message: 'Google Analytics disconnected successfully',
+      },
     });
   } catch (error: any) {
     res.status(400).json({

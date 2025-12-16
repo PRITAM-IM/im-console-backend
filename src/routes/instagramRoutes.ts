@@ -6,6 +6,7 @@ import {
   getInsights,
   getMedia,
 } from '../controllers/instagramController';
+import { disconnectInstagram } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -19,6 +20,7 @@ router.post('/select', authenticate, selectAccount);
 router.get('/insights', authenticate, getInsights); // Query params: ?projectId=xxx&days=90
 router.get('/insights/:projectId', authenticate, getInsights); // Path param for backward compatibility
 router.get('/media/:projectId', authenticate, getMedia);
+router.post('/disconnect', authenticate, disconnectInstagram);
 
 export default router;
 

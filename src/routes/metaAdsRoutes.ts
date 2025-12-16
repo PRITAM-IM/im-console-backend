@@ -10,6 +10,7 @@ import {
   getPlatformBreakdown,
   getDailyBreakdown,
 } from '../controllers/metaAdsController';
+import { disconnectMetaAds } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -26,6 +27,7 @@ router.get('/campaigns/:projectId', authenticate, getCampaigns);
 router.get('/demographics/:projectId', authenticate, getAgeGenderBreakdown);
 router.get('/platforms/:projectId', authenticate, getPlatformBreakdown);
 router.get('/daily/:projectId', authenticate, getDailyBreakdown);
+router.post('/disconnect', authenticate, disconnectMetaAds);
 
 export default router;
 

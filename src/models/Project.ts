@@ -5,8 +5,6 @@ export interface IProject extends Document {
   websiteUrl: string;
   gaPropertyId?: string;
   googleAdsCustomerId?: string;
-  googleAdsManagerId?: string;  // MCC/Manager account ID for login-customer-id header
-  googleAdsCurrency?: string;   // Currency code from Google Ads account
   searchConsoleSiteUrl?: string;
   facebookPageId?: string;
   metaAdsAccountId?: string;
@@ -62,14 +60,6 @@ const projectSchema: Schema<IProject> = new Schema(
       trim: true,
     },
     googleAdsCustomerId: {
-      type: String,
-      trim: true,
-    },
-    googleAdsManagerId: {
-      type: String,
-      trim: true,
-    },
-    googleAdsCurrency: {
       type: String,
       trim: true,
     },

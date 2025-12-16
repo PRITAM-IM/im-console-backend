@@ -9,6 +9,7 @@ import {
   getFacebookFollowData,
   getFacebookPosts,
 } from '../controllers/facebookController';
+import { disconnectFacebook } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -24,5 +25,6 @@ router.get('/overview/:projectId', authenticate, getFacebookOverview);
 router.get('/timeseries/:projectId', authenticate, getFacebookTimeSeries);
 router.get('/follows/:projectId', authenticate, getFacebookFollowData);
 router.get('/posts/:projectId', authenticate, getFacebookPosts);
+router.post('/disconnect', authenticate, disconnectFacebook);
 
 export default router;

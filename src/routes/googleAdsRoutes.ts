@@ -11,6 +11,7 @@ import {
   getGoogleAdsCampaigns,
   getGoogleAdsKeywords,
 } from '../controllers/googleAdsController';
+import { disconnectGoogleAds } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -25,6 +26,7 @@ router.get('/:projectId/locations', authenticate, getGoogleAdsLocations);
 router.get('/:projectId/devices', authenticate, getGoogleAdsDevices);
 router.get('/:projectId/campaigns', authenticate, getGoogleAdsCampaigns);
 router.get('/:projectId/keywords', authenticate, getGoogleAdsKeywords);
+router.post('/disconnect', authenticate, disconnectGoogleAds);
 
 export default router;
 

@@ -9,6 +9,7 @@ import {
   getSheetValues,
   updateRowValues,
 } from '../controllers/googleSheetsController';
+import { disconnectGoogleSheets } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -21,6 +22,7 @@ router.get('/spreadsheets/:projectId', authenticate, listSpreadsheets);
 router.get('/:projectId/details', authenticate, getSpreadsheetDetails);
 router.get('/:projectId/values', authenticate, getSheetValues);
 router.post('/:projectId/update-row', authenticate, updateRowValues);
+router.post('/disconnect', authenticate, disconnectGoogleSheets);
 
 export default router;
 

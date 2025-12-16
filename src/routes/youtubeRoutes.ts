@@ -12,6 +12,7 @@ import {
   getYouTubeGeography,
   getTopContent,
 } from '../controllers/youtubeController';
+import { disconnectYouTube } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -27,6 +28,7 @@ router.get('/:projectId/top-content', authenticate, getTopContent); // New DM Co
 router.get('/:projectId/traffic-sources', authenticate, getYouTubeTrafficSources);
 router.get('/:projectId/devices', authenticate, getYouTubeDevices);
 router.get('/:projectId/geography', authenticate, getYouTubeGeography);
+router.post('/disconnect', authenticate, disconnectYouTube);
 
 export default router;
 

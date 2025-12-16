@@ -10,6 +10,7 @@ import {
   getLinkedInPosts,
   getLinkedInDemographics,
 } from '../controllers/linkedinController';
+import { disconnectLinkedIn } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -32,5 +33,6 @@ router.get('/pages/:projectId', authenticate, getLinkedInPages);
 router.get('/:projectId/overview', authenticate, getLinkedInOverview);
 router.get('/:projectId/posts', authenticate, getLinkedInPosts);
 router.get('/:projectId/demographics', authenticate, getLinkedInDemographics);
+router.post('/disconnect', authenticate, disconnectLinkedIn);
 
 export default router;

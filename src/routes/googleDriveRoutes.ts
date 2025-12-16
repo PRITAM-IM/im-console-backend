@@ -11,6 +11,7 @@ import {
   getRecentFiles,
   getFolderContents,
 } from '../controllers/googleDriveController';
+import { disconnectGoogleDrive } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -25,6 +26,7 @@ router.get('/:projectId/folder/:folderId/contents', authenticate, getFolderConte
 router.get('/:projectId/quota', authenticate, getStorageQuota);
 router.get('/:projectId/stats', authenticate, getDriveStats);
 router.get('/:projectId/recent', authenticate, getRecentFiles);
+router.post('/disconnect', authenticate, disconnectGoogleDrive);
 
 export default router;
 

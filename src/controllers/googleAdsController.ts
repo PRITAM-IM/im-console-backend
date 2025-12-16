@@ -129,7 +129,7 @@ export const handleCallback = asyncHandler(async (req: Request, res: Response): 
 });
 
 export const saveGoogleAdsCustomer = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const { projectId, customerId, currency, managerId } = req.body;
+  const { projectId, customerId } = req.body;
 
   if (!projectId || !customerId) {
     res.status(400).json({
@@ -153,20 +153,10 @@ export const saveGoogleAdsCustomer = asyncHandler(async (req: Request, res: Resp
       return;
     }
 
-    // Update project with Google Ads customer ID, currency, and optional manager ID
-    const updateData: any = {
+    // Update project with Google Ads customer ID
+    const updatedProject = await projectService.updateProject(projectId, userId, {
       googleAdsCustomerId: customerId,
-    };
-    
-    if (currency) {
-      updateData.googleAdsCurrency = currency;
-    }
-    
-    if (managerId) {
-      updateData.googleAdsManagerId = managerId;
-    }
-    
-    const updatedProject = await projectService.updateProject(projectId, userId, updateData);
+    });
 
     if (!updatedProject) {
       res.status(404).json({
@@ -282,15 +272,14 @@ export const getGoogleAdsOverview = asyncHandler(async (req: Request, res: Respo
     // Get access token
     const accessToken = await googleAdsDataService.getAccessToken(projectId);
 
-    // Fetch overview metrics (use manager ID if available for login-customer-id)
+    // Fetch overview metrics
     const metrics = await googleAdsDataService.getOverviewMetrics(
       project.googleAdsCustomerId,
       accessToken,
       {
         startDate: startDate as string,
         endDate: endDate as string,
-      },
-      project.googleAdsManagerId  // Optional manager account ID
+      }
     );
 
     res.status(200).json({
@@ -350,15 +339,14 @@ export const getGoogleAdsCampaigns = asyncHandler(async (req: Request, res: Resp
     // Get access token
     const accessToken = await googleAdsDataService.getAccessToken(projectId);
 
-    // Fetch campaigns (use manager ID if available for login-customer-id)
+    // Fetch campaigns
     const campaigns = await googleAdsDataService.getCampaigns(
       project.googleAdsCustomerId,
       accessToken,
       {
         startDate: startDate as string,
         endDate: endDate as string,
-      },
-      project.googleAdsManagerId  // Optional manager account ID
+      }
     );
 
     res.status(200).json({
@@ -416,15 +404,13 @@ export const getGoogleAdsLocations = asyncHandler(async (req: Request, res: Resp
 
     const accessToken = await googleAdsDataService.getAccessToken(projectId);
 
-    // Fetch locations (use manager ID if available for login-customer-id)
     const locations = await googleAdsDataService.getLocationData(
       project.googleAdsCustomerId,
       accessToken,
       {
         startDate: startDate as string,
         endDate: endDate as string,
-      },
-      project.googleAdsManagerId  // Optional manager account ID
+      }
     );
 
     res.status(200).json({
@@ -482,15 +468,13 @@ export const getGoogleAdsDevices = asyncHandler(async (req: Request, res: Respon
 
     const accessToken = await googleAdsDataService.getAccessToken(projectId);
 
-    // Fetch devices (use manager ID if available for login-customer-id)
     const devices = await googleAdsDataService.getDeviceData(
       project.googleAdsCustomerId,
       accessToken,
       {
         startDate: startDate as string,
         endDate: endDate as string,
-      },
-      project.googleAdsManagerId  // Optional manager account ID
+      }
     );
 
     res.status(200).json({
@@ -548,15 +532,13 @@ export const getGoogleAdsKeywords = asyncHandler(async (req: Request, res: Respo
 
     const accessToken = await googleAdsDataService.getAccessToken(projectId);
 
-    // Fetch keywords (use manager ID if available for login-customer-id)
     const keywords = await googleAdsDataService.getKeywords(
       project.googleAdsCustomerId,
       accessToken,
       {
         startDate: startDate as string,
         endDate: endDate as string,
-      },
-      project.googleAdsManagerId  // Optional manager account ID
+      }
     );
 
     res.status(200).json({

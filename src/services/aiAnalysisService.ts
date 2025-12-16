@@ -393,11 +393,12 @@ Connected Services Analysis:
 
 `;
   
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 7);
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const startDate = new Date(yesterday);
+  startDate.setDate(startDate.getDate() - 6);
   const startDateStr = startDate.toISOString().split('T')[0];
-  const endDateStr = endDate.toISOString().split('T')[0];
+  const endDateStr = yesterday.toISOString().split('T')[0];
 
   // Google Analytics Data
   if (project.gaPropertyId) {
@@ -541,9 +542,10 @@ Connected Services Analysis:
 async function buildGoogleAdsPrompt(projectId: string): Promise<string> {
   // Fetch Google Ads data
   try {
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - 7);
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const startDate = new Date(yesterday);
+    startDate.setDate(startDate.getDate() - 6);
     
     // This would call the actual Google Ads service
     return `Analyze Google Ads performance for the last 7 days. Focus on ROAS, CPC, CTR, and conversion rates.`;

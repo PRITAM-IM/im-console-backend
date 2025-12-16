@@ -11,6 +11,7 @@ import {
   getSearchConsoleCountries,
   getSearchConsoleDevices,
 } from '../controllers/googleSearchConsoleController';
+import { disconnectGoogleSearchConsole } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -29,6 +30,7 @@ router.get('/:projectId/queries', authenticate, getSearchConsoleQueries);
 router.get('/:projectId/pages', authenticate, getSearchConsolePages);
 router.get('/:projectId/countries', authenticate, getSearchConsoleCountries);
 router.get('/:projectId/devices', authenticate, getSearchConsoleDevices);
+router.post('/disconnect', authenticate, disconnectGoogleSearchConsole);
 
 export default router;
 

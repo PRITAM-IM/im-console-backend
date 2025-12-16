@@ -7,6 +7,7 @@ import {
   getProjectPlaceData,
   getPlacePhoto,
 } from '../controllers/googlePlacesController';
+import { disconnectGooglePlaces } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -28,5 +29,8 @@ router.get('/projects/:projectId/place', authenticate, getProjectPlaceData);
 
 // Get a photo from Google Places (proxy endpoint)
 router.get('/photo/:photoName(*)', authenticate, getPlacePhoto);
+
+// Disconnect Google Places
+router.post('/disconnect', authenticate, disconnectGooglePlaces);
 
 export default router;
