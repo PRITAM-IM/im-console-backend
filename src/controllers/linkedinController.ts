@@ -59,40 +59,32 @@ export const initiateAuth = getAuthUrl;
 
 // GET /api/linkedin/callback - OAuth callback from LinkedIn
 export const handleCallbackGet = asyncHandler(async (req: Request, res: Response): Promise<void> => {
-  const { code, state, error: oauthError, error_description } = req.query;
-  
   console.log('[LinkedIn Callback GET] ===== OAuth Callback Received =====');
-  console.log('[LinkedIn Callback GET] Code:', code ? `${String(code).substring(0, 20)}...` : 'MISSING');
-  console.log('[LinkedIn Callback GET] State:', state || 'MISSING');
-  console.log('[LinkedIn Callback GET] Error:', oauthError || 'none');
-  console.log('[LinkedIn Callback GET] Error Description:', error_description || 'none');
+  console.log('[LinkedIn Callback GET] Query params:', req.query);
+  console.log('[LinkedIn Callback GET] Full URL:', req.url);
+  
+  const { code, state, error: oauthError, error_description } = req.query;
   
   // Handle OAuth errors from LinkedIn
   if (oauthError) {
     console.error('[LinkedIn Callback GET] OAuth Error:', oauthError, error_description);
     const errorMsg = encodeURIComponent(String(error_description || oauthError));
-    res.redirect(`http://localhost:5173/auth/linkedin/callback?error=${errorMsg}`);
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/linkedin/callback?error=${errorMsg}`);
     return;
   }
 
-  // Validate code
-  if (!code) {
-    console.error('[LinkedIn Callback GET] Missing authorization code');
-    res.redirect(`http://localhost:5173/auth/linkedin/callback?error=missing_code`);
+  // Validate code and state
+  if (!code || !state) {
+    console.error('[LinkedIn Callback GET] Missing code or state');
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/linkedin/callback?error=missing_code_or_state`);
     return;
   }
 
   // Decode and validate state
-  if (!state) {
-    console.error('[LinkedIn Callback GET] Missing state parameter');
-    res.redirect(`http://localhost:5173/auth/linkedin/callback?error=missing_state`);
-    return;
-  }
-
   const decodedState = decodeState(String(state));
   if (!decodedState || !decodedState.projectId) {
     console.error('[LinkedIn Callback GET] Invalid state parameter');
-    res.redirect(`http://localhost:5173/auth/linkedin/callback?error=invalid_state`);
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/linkedin/callback?error=invalid_state`);
     return;
   }
 
@@ -103,17 +95,42 @@ export const handleCallbackGet = asyncHandler(async (req: Request, res: Response
   const project = await Project.findById(projectId);
   if (!project) {
     console.error('[LinkedIn Callback GET] Project not found:', projectId);
-    res.redirect(`http://localhost:5173/auth/linkedin/callback?error=project_not_found`);
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/linkedin/callback?error=project_not_found`);
     return;
   }
 
   console.log('[LinkedIn Callback GET] Project verified:', project.name);
 
-  // Redirect to frontend with code and projectId
-  const frontendCallbackUrl = `http://localhost:5173/auth/linkedin/callback?code=${code}&projectId=${projectId}`;
-  console.log('[LinkedIn Callback GET] Redirecting to frontend');
-  
-  res.redirect(frontendCallbackUrl);
+  try {
+    console.log(`[LinkedIn OAuth Callback] Processing callback for project: ${projectId}`);
+    
+    // Exchange code for tokens using the SAME redirect_uri
+    console.log('[LinkedIn OAuth Callback] Exchanging code for tokens...');
+    console.log('[LinkedIn OAuth Callback] Using redirect_uri:', LINKEDIN_CONFIG.redirectUri);
+    
+    const { accessToken, refreshToken, expiresAt } = await linkedinAuthService.handleCallback(String(code));
+    console.log(`[LinkedIn OAuth Callback] Tokens received - Access token: ${accessToken ? 'Yes' : 'No'}, Refresh token: ${refreshToken ? 'Yes' : 'No'}`);
+
+    // Save connection to database
+    console.log(`[LinkedIn OAuth Callback] Saving connection to database...`);
+    const savedConnection = await linkedinAuthService.saveConnection(projectId, accessToken, refreshToken, expiresAt);
+    console.log(`[LinkedIn OAuth Callback] Connection saved successfully - ID: ${savedConnection._id}, Project ID: ${savedConnection.projectId}`);
+
+    // Verify the connection was saved
+    const verifyConnection = await linkedinAuthService.getConnectionByProject(projectId);
+    if (!verifyConnection) {
+      console.error(`[LinkedIn OAuth Callback] ERROR: Connection was not found after save!`);
+      throw new Error('Failed to verify connection was saved');
+    }
+    console.log(`[LinkedIn OAuth Callback] Connection verified in database`);
+
+    // Redirect to frontend callback page with success
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/linkedin/callback?linkedin_connected=${projectId}`);
+  } catch (error: any) {
+    console.error(`[LinkedIn OAuth Callback] ERROR:`, error);
+    console.error(`[LinkedIn OAuth Callback] Error stack:`, error.stack);
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/linkedin/callback?error=${encodeURIComponent(error.message)}`);
+  }
 });
 
 // POST /api/linkedin/callback - Exchange code for tokens (called by frontend)

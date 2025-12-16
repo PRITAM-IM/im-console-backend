@@ -34,33 +34,56 @@ export const initiateAuth = asyncHandler(async (req: Request, res: Response): Pr
 });
 
 export const handleCallbackGet = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  console.log('[YouTube Callback GET] ===== OAuth Callback Received =====');
+  console.log('[YouTube Callback GET] Query params:', req.query);
+  console.log('[YouTube Callback GET] Full URL:', req.url);
+  
+  const { code, state, error } = req.query;
+
+  if (error) {
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/youtube/callback?error=${encodeURIComponent(String(error))}`);
+    return;
+  }
+
+  if (!code || !state) {
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/youtube/callback?error=missing_code_or_state`);
+    return;
+  }
+
+  const projectId = String(state);
+
   try {
-    const { code, state } = req.query;
+    console.log(`[YouTube OAuth Callback] Processing callback for project: ${projectId}`);
+    
+    // Handle OAuth callback - exchange code for tokens
+    const { accessToken, refreshToken, expiresAt } = await youtubeAuthService.handleCallback(String(code));
+    console.log(`[YouTube OAuth Callback] Tokens received - Access token: ${accessToken ? 'Yes' : 'No'}, Refresh token: ${refreshToken ? 'Yes' : 'No'}`);
 
-    console.log('[YouTube Callback GET] ===== OAuth Callback Received =====');
-    console.log('[YouTube Callback GET] Code:', code ? `${String(code).substring(0, 20)}...` : 'MISSING');
-    console.log('[YouTube Callback GET] State (projectId):', state || 'MISSING');
-
-    if (!code) {
-      console.error('[YouTube Callback GET] Missing authorization code');
-      return res.redirect(`http://localhost:5173/auth/youtube/callback?error=missing_code`);
+    if (!refreshToken) {
+      console.error('[YouTube OAuth Callback] ERROR: No refresh token received');
+      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/youtube/callback?error=${encodeURIComponent('Failed to obtain refresh token. Please try again.')}`);
+      return;
     }
 
-    const projectId = state ? String(state) : '';
+    // Save connection
+    console.log(`[YouTube OAuth Callback] Saving connection to database...`);
+    const savedConnection = await youtubeAuthService.saveConnection(projectId, refreshToken, accessToken, expiresAt);
+    console.log(`[YouTube OAuth Callback] Connection saved successfully - ID: ${savedConnection._id}, Project ID: ${savedConnection.projectId}`);
 
-    if (!projectId) {
-      console.error('[YouTube Callback GET] Missing project ID in state');
-      return res.redirect(`http://localhost:5173/auth/youtube/callback?error=missing_project_id`);
+    // Verify the connection was saved
+    const verifyConnection = await youtubeAuthService.getConnectionByProject(projectId);
+    if (!verifyConnection) {
+      console.error(`[YouTube OAuth Callback] ERROR: Connection was not found after save!`);
+      throw new Error('Failed to verify connection was saved');
     }
+    console.log(`[YouTube OAuth Callback] Connection verified in database`);
 
-    // Redirect to frontend with code and projectId
-    const frontendCallbackUrl = `http://localhost:5173/auth/youtube/callback?code=${code}&projectId=${projectId}`;
-    console.log('[YouTube Callback GET] Redirecting to frontend:', frontendCallbackUrl);
-
-    res.redirect(frontendCallbackUrl);
+    // Redirect to frontend callback page with success
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/youtube/callback?youtube_connected=${projectId}`);
   } catch (error: any) {
-    console.error('[YouTube Callback GET] Error:', error);
-    res.redirect(`http://localhost:5173/auth/youtube/callback?error=${encodeURIComponent(error.message)}`);
+    console.error(`[YouTube OAuth Callback] ERROR:`, error);
+    console.error(`[YouTube OAuth Callback] Error stack:`, error.stack);
+    res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/youtube/callback?error=${encodeURIComponent(error.message)}`);
   }
 });
 
