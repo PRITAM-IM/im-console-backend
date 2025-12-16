@@ -287,6 +287,8 @@ class AnalyticsService implements IAnalyticsService {
       sessionsChange: this.calculatePercentageChange(metricValues.sessions || 0, prevMetricValues.sessions || 0),
       pageviews: metricValues.eventCount || 0, // Using eventCount as pageviews
       pageviewsChange: this.calculatePercentageChange(metricValues.eventCount || 0, prevMetricValues.eventCount || 0),
+      screenPageViews: metricValues.eventCount || 0, // Added for frontend compatibility
+      screenPageViewsChange: this.calculatePercentageChange(metricValues.eventCount || 0, prevMetricValues.eventCount || 0),
       bounceRate: metricValues.bounceRate || 0,
       bounceRateChange: this.calculatePercentageChange(metricValues.bounceRate || 0, prevMetricValues.bounceRate || 0),
       // Behavioral metrics
@@ -299,6 +301,11 @@ class AnalyticsService implements IAnalyticsService {
       // User metrics
       newUsers: metricValues.newUsers || 0,
       newUsersChange: this.calculatePercentageChange(metricValues.newUsers || 0, prevMetricValues.newUsers || 0),
+      sessionsPerUser: metricValues.totalUsers > 0 ? (metricValues.sessions / metricValues.totalUsers) : 0, // Added for frontend compatibility
+      sessionsPerUserChange: this.calculatePercentageChange(
+        metricValues.totalUsers > 0 ? (metricValues.sessions / metricValues.totalUsers) : 0,
+        prevMetricValues.totalUsers > 0 ? (prevMetricValues.sessions / prevMetricValues.totalUsers) : 0
+      ),
       // Conversion metrics
       conversions: metricValues.conversions || 0,
       conversionsChange: this.calculatePercentageChange(metricValues.conversions || 0, prevMetricValues.conversions || 0),
