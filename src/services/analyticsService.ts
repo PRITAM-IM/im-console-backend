@@ -90,14 +90,27 @@ class AnalyticsService implements IAnalyticsService {
    * Matches DM Cockpit's calculation: ((current - previous) / previous) * 100
    * Handles edge cases for division by zero
    */
-  private calculatePercentageChange(current: number, previous: number): number {
+  private calculatePercentageChange(current: number, previous: number, isRateMetric: boolean = false): number {
+    // For rate metrics (bounceRate, engagementRate), use absolute difference approach
+    // when previous value is very small to avoid extreme percentages
+    if (isRateMetric && previous < 1 && previous !== 0) {
+      // If previous rate is less than 1% but not zero, calculate normally
+      const change = ((current - previous) / previous) * 100;
+      return Math.max(-999, Math.min(999, change));
+    }
+    
     // If previous is zero or very close to zero
     if (previous === 0 || Math.abs(previous) < 0.0001) {
       // If current is also zero, no change
       if (current === 0 || Math.abs(current) < 0.0001) {
         return 0;
       }
-      // If previous was zero but current has value, show as 100% increase
+      // If previous was zero but current has value, return 0 for rate metrics
+      // (they went from no data to some data, not meaningful as percentage)
+      if (isRateMetric) {
+        return 0;
+      }
+      // For count metrics, show as 100% increase
       return current > 0 ? 100 : -100;
     }
     
@@ -105,9 +118,8 @@ class AnalyticsService implements IAnalyticsService {
     const change = ((current - previous) / previous) * 100;
     
     // Cap at reasonable limits to avoid displaying extreme values
-    // DM Cockpit appears to cap at around ±1000%
-    if (change > 1000) return 1000;
-    if (change < -1000) return -1000;
+    if (change > 999) return 999;
+    if (change < -999) return -999;
     
     return change;
   }
@@ -254,7 +266,17 @@ class AnalyticsService implements IAnalyticsService {
       if (prevRow?.metricValues) {
         prevRow.metricValues.forEach((metric: any, index: number) => {
           const metricName = metrics1[index];
-          const value = parseFloat(metric.value || '0');
+          let value = parseFloat(metric.value || '0');
+          
+          // Apply same transformations as current period
+          if (metricName === 'engagementRate' || metricName === 'bounceRate') {
+            value = value * 100; // Convert to percentage (0.5 -> 50)
+          }
+          
+          if (metricName === 'averageSessionDuration') {
+            value = value / 60; // Convert to minutes
+          }
+          
           prevMetricValues[metricName] = isNaN(value) ? 0 : value;
         });
       }
@@ -290,10 +312,10 @@ class AnalyticsService implements IAnalyticsService {
       screenPageViews: metricValues.eventCount || 0, // Added for frontend compatibility
       screenPageViewsChange: this.calculatePercentageChange(metricValues.eventCount || 0, prevMetricValues.eventCount || 0),
       bounceRate: metricValues.bounceRate || 0,
-      bounceRateChange: this.calculatePercentageChange(metricValues.bounceRate || 0, prevMetricValues.bounceRate || 0),
+      bounceRateChange: this.calculatePercentageChange(metricValues.bounceRate || 0, prevMetricValues.bounceRate || 0, true),
       // Behavioral metrics
       engagementRate: metricValues.engagementRate || 0,
-      engagementRateChange: this.calculatePercentageChange(metricValues.engagementRate || 0, prevMetricValues.engagementRate || 0),
+      engagementRateChange: this.calculatePercentageChange(metricValues.engagementRate || 0, prevMetricValues.engagementRate || 0, true),
       averageSessionDuration: metricValues.averageSessionDuration || 0,
       averageSessionDurationChange: this.calculatePercentageChange(metricValues.averageSessionDuration || 0, prevMetricValues.averageSessionDuration || 0),
       engagedSessions: metricValues.engagedSessions || 0,
@@ -317,6 +339,11 @@ class AnalyticsService implements IAnalyticsService {
       averageRevenuePerUser: metricValues.averageRevenuePerUser || 0,
       averageRevenuePerUserChange: this.calculatePercentageChange(metricValues.averageRevenuePerUser || 0, prevMetricValues.averageRevenuePerUser || 0),
     };
+
+    // Log debug info for bounce rate calculation
+    console.log(`[Analytics Debug] Bounce Rate - Current: ${metricValues.bounceRate}, Previous: ${prevMetricValues.bounceRate}, Change: ${data.bounceRateChange}%`);
+    console.log(`[Analytics Debug] Avg Duration - Current: ${metricValues.averageSessionDuration}min, Previous: ${prevMetricValues.averageSessionDuration}min, Change: ${data.averageSessionDurationChange}%`);
+    console.log(`[Analytics Debug] Engagement Rate - Current: ${metricValues.engagementRate}%, Previous: ${prevMetricValues.engagementRate}%, Change: ${data.engagementRateChange}%`);
 
     // Cache the data
     await this.cacheData(projectId, reportType, dateRange, data);
@@ -511,12 +538,12 @@ class AnalyticsService implements IAnalyticsService {
         ...row,
         totalUsersChange: this.calculatePercentageChange(row.totalUsers || 0, prevData.totalUsers || 0),
         sessionsChange: this.calculatePercentageChange(row.sessions || 0, prevData.sessions || 0),
-        bounceRateChange: this.calculatePercentageChange(row.bounceRate || 0, prevData.bounceRate || 0),
+        bounceRateChange: this.calculatePercentageChange(row.bounceRate || 0, prevData.bounceRate || 0, true),
         averageSessionDurationChange: this.calculatePercentageChange(row.averageSessionDuration || 0, prevData.averageSessionDuration || 0),
         totalRevenueChange: this.calculatePercentageChange(row.totalRevenue || 0, prevData.totalRevenue || 0),
         conversionsChange: this.calculatePercentageChange(row.conversions || 0, prevData.conversions || 0),
         eventCountChange: this.calculatePercentageChange(row.eventCount || 0, prevData.eventCount || 0),
-        engagementRateChange: this.calculatePercentageChange(row.engagementRate || 0, prevData.engagementRate || 0),
+        engagementRateChange: this.calculatePercentageChange(row.engagementRate || 0, prevData.engagementRate || 0, true),
         engagedSessionsChange: this.calculatePercentageChange(row.engagedSessions || 0, prevData.engagedSessions || 0),
         newUsersChange: this.calculatePercentageChange(row.newUsers || 0, prevData.newUsers || 0),
       };
