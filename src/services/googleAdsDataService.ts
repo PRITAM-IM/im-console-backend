@@ -2,8 +2,8 @@ import { ENV } from '../config/env';
 import googleAdsAuthService from './googleAdsAuthService';
 import { IGoogleAdsConnection } from '../models/GoogleAdsConnection';
 
-// Google Ads API v18 (current stable version)
-const GOOGLE_ADS_API_VERSION = 'v18';
+// Google Ads API v22 (2025 version - v18 is sunset)
+const GOOGLE_ADS_API_VERSION = 'v22';
 const GOOGLE_ADS_API_BASE_URL = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}`;
 
 export interface IGoogleAdsDataService {
@@ -11,27 +11,32 @@ export interface IGoogleAdsDataService {
   getOverviewMetrics(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any>;
   getLocationData(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any>;
   getDeviceData(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any>;
   getCampaigns(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any>;
   getKeywords(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any>;
 }
 
@@ -44,7 +49,8 @@ const formatCustomerId = (customerId: string): string => {
 const executeGaqlQuery = async (
   customerId: string,
   accessToken: string,
-  query: string
+  query: string,
+  loginCustomerId?: string
 ): Promise<any[]> => {
   const formattedCustomerId = formatCustomerId(customerId);
   // Use 'search' endpoint (not searchStream) for standard REST API calls
@@ -63,15 +69,33 @@ const executeGaqlQuery = async (
   console.log(`[Google Ads API] Developer token configured: ${ENV.GOOGLE_ADS_DEVELOPER_TOKEN.substring(0, 4)}...${ENV.GOOGLE_ADS_DEVELOPER_TOKEN.substring(ENV.GOOGLE_ADS_DEVELOPER_TOKEN.length - 4)}`);
   console.log(`[Google Ads API] Developer token length: ${ENV.GOOGLE_ADS_DEVELOPER_TOKEN.length} characters`);
   
+  // CRITICAL: Only set login-customer-id header when MCC/Manager account is provided
+  // Direct accounts should NOT include this header to avoid permission errors
+  const shouldUseLoginHeader = !!loginCustomerId;
+  console.log(`[Google Ads API] MCC Mode: ${shouldUseLoginHeader ? 'YES' : 'NO'}`);
+  if (shouldUseLoginHeader) {
+    const formattedLoginId = formatCustomerId(loginCustomerId!);
+    console.log(`[Google Ads API] Using login-customer-id (MCC): ${formattedLoginId}`);
+  } else {
+    console.log(`[Google Ads API] Direct account access (no login-customer-id header)`);
+  }
+  
   try {
+    // Build headers - only include login-customer-id for MCC accounts
+    const headers: Record<string, string> = {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'developer-token': ENV.GOOGLE_ADS_DEVELOPER_TOKEN,
+    };
+    
+    // CRITICAL: Only add login-customer-id when MCC manager ID is explicitly provided
+    if (shouldUseLoginHeader && loginCustomerId) {
+      headers['login-customer-id'] = formatCustomerId(loginCustomerId);
+    }
+    
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'developer-token': ENV.GOOGLE_ADS_DEVELOPER_TOKEN,
-        'login-customer-id': formattedCustomerId,
-      },
+      headers,
       body: JSON.stringify({ query }),
     });
 
@@ -132,7 +156,8 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
   public async getOverviewMetrics(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any> {
     console.log(`[Google Ads Data Service] Fetching overview metrics for customer: ${customerId}`);
     console.log(`[Google Ads Data Service] Date range: ${dateRange.startDate} to ${dateRange.endDate}`);
@@ -155,7 +180,7 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
     `;
 
     try {
-      const results = await executeGaqlQuery(customerId, accessToken, query);
+      const results = await executeGaqlQuery(customerId, accessToken, query, loginCustomerId);
       
       if (results.length === 0) {
         return {
@@ -244,7 +269,8 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
   public async getLocationData(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any> {
     console.log(`[Google Ads Data Service] Fetching location data for customer: ${customerId}`);
     
@@ -266,7 +292,7 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
     `;
 
     try {
-      const results = await executeGaqlQuery(customerId, accessToken, query);
+      const results = await executeGaqlQuery(customerId, accessToken, query, loginCustomerId);
       
       // Country code mapping (common ones)
       const countryCodeMap: Record<string, { name: string; code: string }> = {
@@ -308,7 +334,8 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
   public async getDeviceData(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any> {
     console.log(`[Google Ads Data Service] Fetching device data for customer: ${customerId}`);
     
@@ -326,7 +353,7 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
     `;
 
     try {
-      const results = await executeGaqlQuery(customerId, accessToken, query);
+      const results = await executeGaqlQuery(customerId, accessToken, query, loginCustomerId);
       
       // Aggregate by device
       const deviceMap: Record<string, any> = {};
@@ -379,7 +406,8 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
   public async getCampaigns(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any> {
     console.log(`[Google Ads Data Service] Fetching campaigns for customer: ${customerId}`);
     
@@ -403,7 +431,7 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
     `;
 
     try {
-      const results = await executeGaqlQuery(customerId, accessToken, query);
+      const results = await executeGaqlQuery(customerId, accessToken, query, loginCustomerId);
       
       // Aggregate by campaign
       const campaignMap: Record<string, any> = {};
@@ -456,7 +484,8 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
   public async getKeywords(
     customerId: string,
     accessToken: string,
-    dateRange: { startDate: string; endDate: string }
+    dateRange: { startDate: string; endDate: string },
+    loginCustomerId?: string
   ): Promise<any> {
     console.log(`[Google Ads Data Service] Fetching keywords for customer: ${customerId}`);
     
@@ -482,7 +511,7 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
     `;
 
     try {
-      const results = await executeGaqlQuery(customerId, accessToken, query);
+      const results = await executeGaqlQuery(customerId, accessToken, query, loginCustomerId);
       
       return results.map((result: any) => {
         const criterion = result.adGroupCriterion || {};
