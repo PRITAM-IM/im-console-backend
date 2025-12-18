@@ -77,4 +77,11 @@ export const ENV = {
   GOOGLE_BUSINESS_PROFILE_REDIRECT_URL: process.env.GOOGLE_BUSINESS_PROFILE_REDIRECT_URL || 'http://localhost:3000/api/google-business-profile/callback',
   // Google Places API
   GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY || '',
+  // OpenAI
+  OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+  OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4-turbo',
+  OPENAI_MAX_TOKENS: process.env.OPENAI_MAX_TOKENS || '2000',
+  // Pinecone Vector Database
+  PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
+  PINECONE_INDEX_NAME: process.env.PINECONE_INDEX_NAME || 'hotel-analytics-metrics',
 };

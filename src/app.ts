@@ -21,6 +21,7 @@ import analyticsRoutes from './routes/analyticsRoutes';
 import linkedinRoutes from './routes/linkedinRoutes';
 import aiAnalysisRoutes from './routes/aiAnalysisRoutes';
 import formRoutes from './routes/formRoutes';
+import chatRoutes from './routes/chatRoutes';
 
 // Import middleware
 import { errorHandler } from './middleware/errorMiddleware';
@@ -76,6 +77,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/linkedin', linkedinRoutes);
 app.use('/api/ai', aiAnalysisRoutes);
 app.use('/api', formRoutes); // Form routes (includes both /projects/:projectId/forms and /forms/:slug)
+app.use('/api/chat', chatRoutes); // Chat routes for Avi AI
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
