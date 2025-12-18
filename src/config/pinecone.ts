@@ -27,11 +27,16 @@ export function getPineconeClient(): Pinecone {
   }
 
   if (!pineconeClient) {
-    console.log('🔌 Initializing Pinecone client...');
-    pineconeClient = new Pinecone({
-      apiKey: ENV.PINECONE_API_KEY,
-    });
-    console.log('✅ Pinecone client initialized successfully');
+    try {
+      console.log('🔌 Initializing Pinecone client...');
+      pineconeClient = new Pinecone({
+        apiKey: ENV.PINECONE_API_KEY,
+      });
+      console.log('✅ Pinecone client initialized successfully');
+    } catch (error: any) {
+      console.error('❌ Failed to initialize Pinecone client:', error.message);
+      throw error;
+    }
   }
 
   return pineconeClient;
@@ -40,10 +45,18 @@ export function getPineconeClient(): Pinecone {
 /**
  * Initialize Pinecone index (create if doesn't exist)
  * Call this during application startup
+ * 
+ * @param skipCheck - Skip index existence check (useful for serverless environments)
  */
-export async function initializePineconeIndex(): Promise<void> {
+export async function initializePineconeIndex(skipCheck: boolean = false): Promise<void> {
   try {
     const client = getPineconeClient();
+    
+    // In serverless environments, skip the check to avoid cold start delays
+    if (skipCheck) {
+      console.log(`✅ Pinecone client initialized (skipped index check for serverless)`);
+      return;
+    }
     
     console.log(`🔍 Checking if index "${PINECONE_CONFIG.indexName}" exists...`);
     

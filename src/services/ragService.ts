@@ -436,6 +436,13 @@ export async function needsReindexing(
   maxAgeHours: number = 24
 ): Promise<boolean> {
   try {
+    // Check if Pinecone is configured
+    const { ENV } = await import('../config/env');
+    if (!ENV.PINECONE_API_KEY) {
+      console.log(`⚠️  Pinecone not configured - skipping indexing check`);
+      return false; // Don't try to index if Pinecone isn't configured
+    }
+
     // Check if project has any vectors
     const hasVectors = await vectorService.hasProjectVectors(projectId);
     if (!hasVectors) {
@@ -456,7 +463,7 @@ export async function needsReindexing(
     return false;
   } catch (error: any) {
     console.error('❌ Error checking if re-indexing needed:', error.message);
-    return true; // Assume needs re-indexing on error
+    return false; // Don't index on error - fail gracefully
   }
 }
 
