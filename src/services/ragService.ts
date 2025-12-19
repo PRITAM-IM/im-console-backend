@@ -2,7 +2,7 @@ import { AggregatedMetrics } from './metricsAggregator';
 import { MetricChunk, VectorMetadata, VectorQueryResult } from '../models/VectorMetadata';
 import embeddingService from './embeddingService';
 import vectorService from './vectorService';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from '../utils/uuid';
 
 /**
  * RAG (Retrieval-Augmented Generation) Service

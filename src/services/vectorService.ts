@@ -7,7 +7,7 @@ import {
   QueryVectorParams,
   DeleteVectorParams,
 } from '../models/VectorMetadata';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from '../utils/uuid';
 
 /**
  * Vector Service
