@@ -174,14 +174,16 @@ export const deleteConversation = asyncHandler(async (req: Request, res: Respons
 
 /**
  * @route   GET /api/chat/preset-questions/:projectId
- * @desc    Get preset questions for a project
+ * @desc    Get preset questions for a project (optionally context-aware)
  * @access  Private
+ * @query   context - Page context (youtube, analytics, facebook, etc.)
  */
 export const getPresetQuestions = asyncHandler(async (req: Request, res: Response) => {
   const { projectId } = req.params;
+  const { context } = req.query;
   const userId = (req as any).user._id;
 
-  console.log(`[ChatController] Fetching preset questions for project ${projectId}`);
+  console.log(`[ChatController] Fetching preset questions for project ${projectId}, context: ${context || 'general'}`);
 
   try {
     // Determine date range (last 7 days excluding today)
@@ -197,7 +199,7 @@ export const getPresetQuestions = asyncHandler(async (req: Request, res: Respons
     let questions;
     try {
       const metrics = await metricsAggregator.getProjectMetrics(projectId, startDate, endDate);
-      questions = presetQuestionsService.generatePresetQuestions(metrics);
+      questions = presetQuestionsService.generatePresetQuestions(metrics, context as string);
     } catch (error) {
       // If metrics fetch fails, return default questions
       console.log('[ChatController] Using default preset questions');

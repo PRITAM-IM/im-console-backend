@@ -3,11 +3,15 @@
   "version": "1.0.0",
   "description": "Backend for Hotel Analytics Cockpit with GA4 integration",
   "main": "server.ts",
+  "engines": {
+    "node": ">=18.0.0 <21.0.0",
+    "npm": ">=9.0.0"
+  },
   "scripts": {
     "start": "node dist/server.js",
     "dev": "nodemon src/server.ts",
     "build": "tsc",
-    "vercel-build": "echo Building for Vercel...",
+    "vercel-build": "tsc",
     "index-metrics": "ts-node src/scripts/indexMetrics.ts"
   },
   "dependencies": {

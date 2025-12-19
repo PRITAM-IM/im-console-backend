@@ -26,16 +26,17 @@ const connectDB = async (): Promise<typeof mongoose> => {
   if (!cached.promise) {
     const opts = {
       bufferCommands: false, // Disable buffering to fail fast if not connected
-      serverSelectionTimeoutMS: 10000, // Timeout after 10s instead of 30s
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s for faster failures
       socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
-      maxPoolSize: 10, // Maintain up to 10 socket connections
+      maxPoolSize: 5, // Reduced for serverless - prevent connection exhaustion
+      minPoolSize: 1, // Keep at least 1 connection warm
       retryWrites: true,
       w: 'majority' as const,
     };
 
     console.log('Connecting to MongoDB...');
     console.log('MongoDB URI (masked):', ENV.MONGODB_URI.replace(/:\/\/([^:]+):([^@]+)@/, '://***:***@'));
-    
+
     cached.promise = mongoose.connect(ENV.MONGODB_URI, opts).then((mongoose) => {
       console.log(`✅ MongoDB Connected: ${mongoose.connection.host}`);
 

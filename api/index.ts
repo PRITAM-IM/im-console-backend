@@ -24,11 +24,11 @@ async function ensureInitialized() {
   initializationPromise = (async () => {
     try {
       console.log('🔌 Initializing serverless function...');
-      
+
       // Connect to MongoDB
       await connectDB();
       console.log('✅ MongoDB connected');
-      
+
       // Initialize Pinecone (only if API key is configured)
       // Skip index creation check in serverless to avoid timeouts
       if (ENV.PINECONE_API_KEY) {
@@ -39,7 +39,7 @@ async function ensureInitialized() {
       } else {
         console.log('⚠️  Pinecone not configured - using traditional context');
       }
-      
+
       isInitialized = true;
       console.log('✅ Serverless function initialized');
     } catch (error: any) {
@@ -54,18 +54,41 @@ async function ensureInitialized() {
 
 // Ensure DB connection before handling requests
 export default async (req: VercelRequest, res: VercelResponse) => {
+  // Set a timeout slightly less than Vercel's limit to gracefully handle long operations
+  // This prevents silent failures and provides better error messages
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      console.error('⏱️ Request timeout - operation exceeded 58 seconds');
+      res.status(504).json({
+        success: false,
+        message: 'Request timeout - operation took too long',
+        error: 'The operation exceeded the maximum execution time. Please try again or contact support.',
+      });
+    }
+  }, 58000); // 58s (2s buffer before Vercel's 60s limit)
+
   try {
     // Ensure services are initialized
     await ensureInitialized();
-    
+
+    // Clear timeout if initialization succeeds
+    clearTimeout(timeout);
+
     // Handle the request using Express app
     return app(req as any, res as any);
   } catch (error: any) {
+    // Clear timeout on error
+    clearTimeout(timeout);
+
     console.error('❌ Serverless function error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: error.message,
-    });
+
+    // Only send response if headers haven't been sent yet
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: error.message,
+      });
+    }
   }
 };
