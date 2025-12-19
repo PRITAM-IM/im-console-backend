@@ -27,9 +27,12 @@ async function initializeServices() {
 
 // Initialize services and start server
 initializeServices().then(() => {
-  // Start server
-  app.listen(PORT, () => {
-    console.log(`Server running in ${ENV.NODE_ENV} mode on port ${PORT}`);
+  // Start server - bind to 0.0.0.0 for Render compatibility
+  const HOST = '0.0.0.0';
+  app.listen(PORT, HOST, () => {
+    console.log(`🚀 Server running in ${ENV.NODE_ENV} mode`);
+    console.log(`📡 Listening on http://${HOST}:${PORT}`);
+    console.log(`🏥 Health check: http://${HOST}:${PORT}/api/health`);
   });
 });
 

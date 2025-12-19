@@ -1,0 +1,113 @@
+# Render Blueprint Configuration
+# Defines services, environment variables, and deployment settings
+
+services:
+  # Backend API Service
+  - type: web
+    name: hotel-analytics-backend
+    env: node
+    region: oregon  # Choose: oregon, frankfurt, singapore, ohio
+    plan: free  # Options: free, starter, standard, pro
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      # Node Environment
+      - key: NODE_ENV
+        value: production
+      
+      # Database
+      - key: MONGODB_URI
+        sync: false  # Set in Render dashboard (secret)
+      
+      # Authentication
+      - key: JWT_SECRET
+        sync: false  # Set in Render dashboard (secret)
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      
+      # Frontend URL (for CORS) - UPDATE WITH YOUR FRONTEND DOMAIN
+      - key: FRONTEND_URL
+        value: https://your-frontend-domain.onrender.com
+      
+      # OpenAI Configuration
+      - key: OPENAI_API_KEY
+        sync: false  # Set in Render dashboard (secret)
+      - key: OPENAI_MODEL
+        value: gpt-4-turbo
+      - key: OPENAI_MAX_TOKENS
+        value: "2000"
+      
+      # Google OAuth - UPDATE REDIRECT URLs WITH YOUR RENDER DOMAIN
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URL
+        value: https://your-backend-domain.onrender.com/api/google/callback
+      - key: GOOGLE_AUTH_REDIRECT_URL
+        value: https://your-backend-domain.onrender.com/api/auth/google/callback
+      - key: GOOGLE_USER_REDIRECT_URL
+        value: https://your-frontend-domain.onrender.com/auth/google/callback
+      
+      # Google Ads
+      - key: GOOGLE_ADS_DEVELOPER_TOKEN
+        sync: false
+      - key: GOOGLE_ADS_REDIRECT_URL
+        value: https://your-backend-domain.onrender.com/api/google-ads/callback
+      
+      # Google Services
+      - key: GOOGLE_SEARCH_CONSOLE_REDIRECT_URL
+        value: https://your-backend-domain.onrender.com/api/gsc/callback
+      - key: GOOGLE_SHEETS_REDIRECT_URL
+        value: https://your-backend-domain.onrender.com/api/google-sheets/callback
+      - key: GOOGLE_DRIVE_REDIRECT_URL
+        value: https://your-backend-domain.onrender.com/api/google-drive/callback
+      - key: GOOGLE_BUSINESS_PROFILE_REDIRECT_URL
+        value: https://your-backend-domain.onrender.com/api/google-business-profile/callback
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      
+      # YouTube
+      - key: YOUTUBE_REDIRECT_URL
+        value: https://your-backend-domain.onrender.com/api/youtube/callback
+      
+      # Facebook & Meta
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_REDIRECT_URI
+        value: https://your-backend-domain.onrender.com/api/facebook/callback
+      - key: META_ADS_REDIRECT_URI
+        value: https://your-backend-domain.onrender.com/api/meta-ads/callback
+      
+      # LinkedIn
+      - key: LINKEDIN_CLIENT_ID
+        sync: false
+      - key: LINKEDIN_CLIENT_SECRET
+        sync: false
+      - key: LINKEDIN_REDIRECT_URL
+        value: https://your-backend-domain.onrender.com/api/linkedin/callback
+      
+      # Pinecone (Optional - for RAG)
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX_NAME
+        value: hotel-analytics-metrics
+      
+      # Port (Render provides this automatically)
+      - key: PORT
+        value: "10000"
+    
+    # Auto-deploy settings
+    autoDeploy: true
+    
+    # Health check configuration
+    healthCheck:
+      path: /api/health
+      initialDelaySeconds: 60
+      periodSeconds: 30
+      timeoutSeconds: 10
+      successThreshold: 1
+      failureThreshold: 3
