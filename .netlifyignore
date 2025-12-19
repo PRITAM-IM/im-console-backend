@@ -1,0 +1,44 @@
+# Dependencies (Netlify will install these)
+node_modules/
+
+# Build outputs (Netlify will build)
+dist/
+
+# Environment files (use Netlify dashboard instead)
+.env
+.env.*
+!.env.example
+
+# TypeScript cache
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Editor files
+.vscode/
+.idea/
+.DS_Store
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__/
+coverage/
+
+# Development files
+nodemon.json
+
+# Vercel-specific files (not needed for Netlify)
+vercel.json
+.vercel/
+api/index.ts
+
+# Scripts (not needed in production, but keep for potential use)
+# scripts/
+
+# Git
+.git/
+.gitignore
