@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build outputs (we want Vercel to use TypeScript directly)
+dist/
+build/
+
+# Environment files (use Vercel dashboard instead)
+.env
+.env.*
+!.env.example
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# Editor files
+.vscode/
+.idea/
+.DS_Store
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__/
+
+# Scripts (not needed in production)
+scripts/
+
+# Development files
+nodemon.json

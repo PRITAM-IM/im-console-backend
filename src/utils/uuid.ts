@@ -4,23 +4,29 @@
  * Compatible with Vercel serverless functions
  */
 
+import { randomBytes } from 'crypto';
+
 /**
  * Generate a UUID v4 (random UUID)
- * Uses crypto.randomUUID() if available (Node 14.17+), otherwise uses fallback
+ * Uses crypto.randomBytes for secure random generation
  */
 export function generateUUID(): string {
-  // Try to use native crypto.randomUUID() (Node 14.17+)
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-
-  // Fallback: Manual UUID v4 generation
-  // Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  // Use Node.js crypto.randomBytes for secure random generation
+  const bytes = randomBytes(16);
+  
+  // Set version (4) and variant bits
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // Version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // Variant 10
+  
+  // Convert to UUID string format
+  const hex = bytes.toString('hex');
+  return [
+    hex.substring(0, 8),
+    hex.substring(8, 12),
+    hex.substring(12, 16),
+    hex.substring(16, 20),
+    hex.substring(20, 32),
+  ].join('-');
 }
 
 /**
