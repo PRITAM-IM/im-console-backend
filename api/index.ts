@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import app from '../src/app';
-import connectDB from '../src/config/db';
-import { initializePineconeIndex } from '../src/config/pinecone';
-import { ENV } from '../src/config/env';
+import app from '../src/app.js';
+import connectDB from '../src/config/db.js';
+import { initializePineconeIndex } from '../src/config/pinecone.js';
+import { ENV } from '../src/config/env.js';
 
 // Track initialization state
 let isInitialized = false;

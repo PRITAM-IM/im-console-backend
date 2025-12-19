@@ -1,6 +1,7 @@
 {
   "name": "hotel-analytics-cockpit-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Backend for Hotel Analytics Cockpit with GA4 integration",
   "main": "server.ts",
   "scripts": {
