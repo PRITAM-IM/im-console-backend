@@ -1,7 +1,7 @@
 import app from './app';
 import connectDB from './config/db';
 import { ENV } from './config/env';
-// NOTE: Pinecone/RAG functionality moved to chatbot-backend
+import { initializePineconeIndex } from './config/pinecone';
 
 const PORT = ENV.PORT || 3000;
 
@@ -10,11 +10,18 @@ async function initializeServices() {
   try {
     // Connect to MongoDB
     await connectDB();
-    console.log('✅ Main backend services initialized');
-    // NOTE: Pinecone/RAG initialization moved to chatbot-backend
+    
+    // Initialize Pinecone index (only if API key is configured)
+    if (ENV.PINECONE_API_KEY) {
+      console.log('🔮 Initializing Pinecone vector database...');
+      await initializePineconeIndex();
+      console.log('✅ Pinecone initialized - RAG is enabled');
+    } else {
+      console.log('⚠️  Pinecone API key not configured - RAG will fall back to traditional context');
+    }
   } catch (error: any) {
     console.error('❌ Error initializing services:', error.message);
-    process.exit(1);
+    // Don't exit - allow server to run with traditional context if Pinecone fails
   }
 }
 
