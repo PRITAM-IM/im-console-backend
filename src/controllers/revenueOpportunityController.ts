@@ -91,61 +91,93 @@ export const discoverOpportunities = async (req: AuthRequest, res: Response) => 
         }
 
         // Save opportunities with AI insights
+        // Limit to 10 events to avoid timeout in production (each AI call takes ~2-3s)
+        const eventsToProcess = events.slice(0, 10);
+        console.log(`📊 Processing ${eventsToProcess.length} events with AI insights...`);
+
+        // Process events in parallel for faster response (batch of 3 at a time)
         const opportunities = [];
-        for (const event of events.slice(0, 20)) {
-            // Limit to 20 events to save API costs
+        const batchSize = 3;
 
-            // Calculate distance only if we have valid coordinates
-            let distance = -1; // -1 indicates unknown
-            if (latitude && longitude && event.location.latitude && event.location.longitude) {
-                distance = eventDiscoveryService.calculateDistance(
-                    latitude,
-                    longitude,
-                    event.location.latitude,
-                    event.location.longitude
-                );
-            } else if (latitude && longitude) {
-                // Event has no coordinates, assume it's within reasonable distance from the searched city
-                distance = 25; // Default to 25km within the city
-            }
+        for (let i = 0; i < eventsToProcess.length; i += batchSize) {
+            const batch = eventsToProcess.slice(i, i + batchSize);
 
-            console.log(`💡 Generating AI insights for: ${event.name}`);
+            const batchResults = await Promise.all(
+                batch.map(async (event) => {
+                    try {
+                        // Calculate distance only if we have valid coordinates
+                        let distance = -1; // -1 indicates unknown
+                        if (latitude && longitude && event.location.latitude && event.location.longitude) {
+                            distance = eventDiscoveryService.calculateDistance(
+                                latitude,
+                                longitude,
+                                event.location.latitude,
+                                event.location.longitude
+                            );
+                        } else if (latitude && longitude) {
+                            // Event has no coordinates, assume it's within reasonable distance from the searched city
+                            distance = 25; // Default to 25km within the city
+                        }
 
-            // Generate AI insights
-            const aiInsights = await eventDiscoveryService.generateEventInsights(
-                event,
-                project.name,
-                distance
+                        console.log(`💡 Generating AI insights for: ${event.name}`);
+
+                        // Generate AI insights with timeout
+                        const aiInsights = await Promise.race([
+                            eventDiscoveryService.generateEventInsights(event, project.name, distance),
+                            new Promise((_, reject) =>
+                                setTimeout(() => reject(new Error('AI timeout')), 10000)
+                            )
+                        ]).catch(() => ({
+                            revenueOpportunity: distance < 20 ? 'High' : distance < 50 ? 'Medium' : 'Low',
+                            estimatedRoomDemand: 10,
+                            recommendedCampaignStart: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                            suggestedActions: ['Create targeted marketing campaign', 'Offer early booking discounts'],
+                            targetAudience: 'Event attendees',
+                            pricingStrategy: 'Adjust rates based on expected demand',
+                        }));
+
+                        return { event, distance, aiInsights };
+                    } catch (error) {
+                        console.error(`❌ Error processing event ${event.name}:`, error);
+                        return null;
+                    }
+                })
             );
 
-            // Save to database
-            const opportunity = await RevenueOpportunity.findOneAndUpdate(
-                {
-                    projectId: project._id,
-                    eventId: event.id,
-                },
-                {
-                    projectId: project._id,
-                    eventId: event.id,
-                    eventName: event.name,
-                    eventType: event.type,
-                    description: event.description,
-                    startDate: event.startDate,
-                    endDate: event.endDate,
-                    location: event.location,
-                    distanceFromHotel: distance,
-                    expectedAttendance: event.expectedAttendance,
-                    aiInsights: {
-                        ...aiInsights,
-                        generatedAt: new Date(),
+            // Save batch results to database
+            for (const result of batchResults) {
+                if (!result) continue;
+                const { event, distance, aiInsights } = result as any;
+
+                // Save to database
+                const opportunity = await RevenueOpportunity.findOneAndUpdate(
+                    {
+                        projectId: project._id,
+                        eventId: event.id,
                     },
-                    source: event.source,
-                    isActive: true,
-                },
-                { upsert: true, new: true }
-            );
+                    {
+                        projectId: project._id,
+                        eventId: event.id,
+                        eventName: event.name,
+                        eventType: event.type,
+                        description: event.description,
+                        startDate: event.startDate,
+                        endDate: event.endDate,
+                        location: event.location,
+                        distanceFromHotel: distance,
+                        expectedAttendance: event.expectedAttendance,
+                        aiInsights: {
+                            ...aiInsights,
+                            generatedAt: new Date(),
+                        },
+                        source: event.source,
+                        isActive: true,
+                    },
+                    { upsert: true, new: true }
+                );
 
-            opportunities.push(opportunity);
+                opportunities.push(opportunity);
+            }
         }
 
         console.log(`✅ Saved ${opportunities.length} opportunities to database`);
