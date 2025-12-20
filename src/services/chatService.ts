@@ -29,6 +29,7 @@ export interface SendMessageParams {
     startDate: string;
     endDate: string;
   };
+  pageContext?: string;
 }
 
 export interface SendMessageResponse {
@@ -77,7 +78,7 @@ async function buildContextWithRAG(
 
     // Check if project needs re-indexing
     const needsIndexing = await ragService.needsReindexing(projectId);
-    
+
     if (needsIndexing) {
       console.log(`[ChatService] 📊 Project needs indexing, indexing now...`);
       await ragService.indexMetrics(metrics, projectId);
@@ -103,7 +104,7 @@ async function buildContextWithRAG(
 
       // Build comprehensive context from current and historical chunks
       const ragContext = ragService.buildContextWithHistory(currentPeriod, historicalPeriod);
-      
+
       console.log(`[ChatService] ✅ Built RAG context from ${currentPeriod.length} current + ${historicalPeriod.length} historical chunks`);
       console.log(`[ChatService] 📉 Enhanced context with month-over-month comparison capability`);
 
@@ -120,7 +121,7 @@ async function buildContextWithRAG(
 
       // Build context from retrieved chunks
       const ragContext = ragService.buildContextFromChunks(relevantChunks);
-      
+
       console.log(`[ChatService] ✅ Built RAG context from ${relevantChunks.length} chunks`);
 
       return { context: ragContext, metrics, usedRAG: true };
@@ -128,7 +129,7 @@ async function buildContextWithRAG(
   } catch (error: any) {
     console.error(`[ChatService] ❌ RAG context building failed:`, error.message);
     console.log(`[ChatService] 🔄 Falling back to traditional context building`);
-    
+
     // Fallback to traditional approach
     const metrics = await metricsAggregator.getProjectMetrics(projectId, startDate, endDate);
     const fallbackContext = contextFormatter.formatMetricsForContext(metrics);
@@ -137,17 +138,95 @@ async function buildContextWithRAG(
 }
 
 /**
- * Build messages array for OpenAI
+ * Build messages array for OpenAI with comprehensive context
  */
 async function buildMessages(
   conversationId: string | undefined,
   userMessage: string,
-  contextData: string
+  contextData: string,
+  pageContext?: string,
+  userId?: string,
+  projectId?: string
 ): Promise<ChatMessage[]> {
   const messages: ChatMessage[] = [];
 
-  // Add system prompt with context
-  const systemPrompt = `${OPENAI_CONFIG.systemPrompt}\n\nCurrent Data Context:\n${contextData}`;
+  // Build enhanced system prompt with page context
+  let systemPrompt = `${OPENAI_CONFIG.systemPrompt}\n\nCurrent Data Context:\n${contextData}`;
+
+  // Add project and user context
+  if (projectId && userId) {
+    try {
+      const Project = (await import('../models/Project')).default;
+      const User = (await import('../models/User')).default;
+
+      const [project, user] = await Promise.all([
+        Project.findById(projectId).lean(),
+        User.findById(userId).lean()
+      ]);
+
+      if (project && user) {
+        // Build comprehensive project context
+        const connectedPlatforms: string[] = [];
+        const notConnectedPlatforms: string[] = [];
+
+        const platformChecks = [
+          { name: 'Google Analytics', field: project.gaPropertyId, id: project.gaPropertyId },
+          { name: 'Google Ads', field: project.googleAdsCustomerId, id: project.googleAdsCustomerId },
+          { name: 'Search Console', field: project.searchConsoleSiteUrl, id: project.searchConsoleSiteUrl },
+          { name: 'Facebook', field: project.facebookPageId, id: project.facebookPageId },
+          { name: 'Meta Ads', field: project.metaAdsAccountId, id: project.metaAdsAccountId },
+          { name: 'Instagram', field: project.instagram?.igUserId, id: project.instagram?.igUsername },
+          { name: 'YouTube', field: project.youtubeChannelId, id: project.youtubeChannelId },
+          { name: 'LinkedIn', field: project.linkedinPageId, id: project.linkedinPageId },
+          { name: 'Google Places', field: project.googlePlacesId, id: project.googlePlacesData?.displayName }
+        ];
+
+        platformChecks.forEach(({ name, field, id }) => {
+          if (field) {
+            connectedPlatforms.push(id ? `${name} (${id})` : name);
+          } else {
+            notConnectedPlatforms.push(name);
+          }
+        });
+
+        systemPrompt += `\n\n**Project & User Context:**
+- **Project Name:** ${project.name}
+- **Website:** ${project.websiteUrl}
+- **User:** ${user.name} (${user.email})
+- **User Role:** ${user.role === 'admin' ? 'Administrator' : 'Hotel Manager'}
+
+**Connected Platforms (${connectedPlatforms.length}/9):**
+${connectedPlatforms.map(p => `✅ ${p}`).join('\n')}
+
+${notConnectedPlatforms.length > 0 ? `**Not Connected (${notConnectedPlatforms.length}):**
+${notConnectedPlatforms.map(p => `❌ ${p} - Suggest connecting for comprehensive insights`).join('\n')}` : ''}
+
+**Important:** You have full access to data from all connected platforms. Never say "I don't have context" - you have comprehensive marketing data available through the RAG system.`;
+      }
+    } catch (error) {
+      console.error('Error fetching project/user context:', error);
+    }
+  }
+
+  if (pageContext) {
+    const pageContextMap: Record<string, string> = {
+      'overview': 'The user is currently viewing the DASHBOARD OVERVIEW page with summary metrics across all platforms.',
+      'analytics': 'The user is currently viewing the GOOGLE ANALYTICS page with detailed traffic and user behavior data.',
+      'youtube': 'The user is currently viewing the YOUTUBE page with video performance metrics.',
+      'facebook': 'The user is currently viewing the FACEBOOK page with page engagement and post performance.',
+      'instagram': 'The user is currently viewing the INSTAGRAM page with profile and content metrics.',
+      'meta-ads': 'The user is currently viewing the META ADS page with Facebook/Instagram advertising campaign data.',
+      'google-ads': 'The user is currently viewing the GOOGLE ADS page with search and display advertising metrics.',
+      'search-console': 'The user is currently viewing the SEARCH CONSOLE page with SEO and organic search performance.',
+      'linkedin': 'The user is currently viewing the LINKEDIN page with professional network engagement data.'
+    };
+
+    const contextInfo = pageContextMap[pageContext] || '';
+    if (contextInfo) {
+      systemPrompt += `\n\n**Current Page Context:**\n${contextInfo}\nPrioritize information relevant to this page when answering questions.`;
+    }
+  }
+
   messages.push({
     role: 'system',
     content: systemPrompt,
@@ -258,7 +337,7 @@ async function saveConversation(
       }
       title += '...';
     }
-    
+
     conversation = await ChatConversation.create({
       userId: new mongoose.Types.ObjectId(userId),
       projectId: new mongoose.Types.ObjectId(projectId),
@@ -313,7 +392,7 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
     // Determine date range (use provided or default to last 7 days excluding today)
     let endDate: string;
     let startDate: string;
-    
+
     if (dateRange?.endDate && dateRange?.startDate) {
       endDate = dateRange.endDate;
       startDate = dateRange.startDate;
@@ -322,7 +401,7 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
       const yesterday = new Date();
       yesterday.setDate(yesterday.getDate() - 1);
       endDate = yesterday.toISOString().split('T')[0];
-      
+
       const sevenDaysAgo = new Date(yesterday);
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
       startDate = sevenDaysAgo.toISOString().split('T')[0];
@@ -343,8 +422,15 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
       console.log(`[ChatService] 📋 Using traditional full context approach`);
     }
 
-    // Build messages array
-    const messages = await buildMessages(conversationId, message, context);
+    // Build messages array with comprehensive context
+    const messages = await buildMessages(
+      conversationId,
+      message,
+      context,
+      params.pageContext,
+      userId,
+      projectId
+    );
 
     // Call OpenAI
     const aiResponse = await callOpenAI(messages);
@@ -367,7 +453,7 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
     };
   } catch (error: any) {
     console.error('[ChatService] Error processing message:', error);
-    
+
     // Handle OpenAI-specific errors
     const errorMessage = handleOpenAIError(error);
     throw new Error(errorMessage);

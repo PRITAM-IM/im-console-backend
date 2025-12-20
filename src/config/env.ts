@@ -36,6 +36,13 @@ console.log('[ENV Config] Facebook Config Check:', {
   FACEBOOK_REDIRECT_URI: process.env.FACEBOOK_REDIRECT_URI || 'NOT SET',
 });
 
+// Debug: Log Google Places API key status
+console.log('[ENV Config] Google Places API Key Check:', {
+  length: process.env.GOOGLE_PLACES_API_KEY?.length || 0,
+  first20: process.env.GOOGLE_PLACES_API_KEY ? process.env.GOOGLE_PLACES_API_KEY.substring(0, 20) + '...' : 'NOT SET',
+  hasNewlines: process.env.GOOGLE_PLACES_API_KEY?.includes('\n') || process.env.GOOGLE_PLACES_API_KEY?.includes('\r') ? 'YES - PROBLEM!' : 'No',
+});
+
 export const ENV = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: process.env.PORT ? parseInt(process.env.PORT, 10) : 3000,

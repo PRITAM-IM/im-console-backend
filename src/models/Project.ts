@@ -28,6 +28,13 @@ export interface IProject extends Document {
     };
     lastUpdated?: Date;
   };
+  // Manual location entry (fallback when Google Places not connected)
+  manualLocation?: {
+    city: string;
+    country?: string;
+    latitude?: number;
+    longitude?: number;
+  };
   instagram?: {
     igUserId?: string;
     igUsername?: string;
@@ -133,6 +140,23 @@ const projectSchema: Schema<IProject> = new Schema(
       },
       lastUpdated: {
         type: Date,
+      },
+    },
+    // Manual location entry (fallback when Google Places not connected)
+    manualLocation: {
+      city: {
+        type: String,
+        trim: true,
+      },
+      country: {
+        type: String,
+        trim: true,
+      },
+      latitude: {
+        type: Number,
+      },
+      longitude: {
+        type: Number,
       },
     },
     instagram: {

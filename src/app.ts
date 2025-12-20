@@ -78,6 +78,7 @@ app.use('/api/linkedin', linkedinRoutes);
 app.use('/api/ai', aiAnalysisRoutes);
 app.use('/api', formRoutes); // Form routes (includes both /projects/:projectId/forms and /forms/:slug)
 app.use('/api/chat', chatRoutes); // Chat routes for Avi AI
+app.use('/api/revenue-opportunities', require('./routes/revenueOpportunityRoutes').default); // Revenue opportunities
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

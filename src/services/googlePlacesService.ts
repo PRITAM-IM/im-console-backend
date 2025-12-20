@@ -82,7 +82,9 @@ class GooglePlacesService implements IPlacesService {
   constructor() {
     this.apiKey = ENV.GOOGLE_PLACES_API_KEY;
     if (!this.apiKey) {
-      console.warn('[Google Places Service] API key not configured');
+      console.warn('[Google Places Service] ⚠️ API key not configured!');
+    } else {
+      console.log('[Google Places Service] ✅ API key loaded (length:', this.apiKey.length, ', first 20 chars:', this.apiKey.substring(0, 20) + '...)');
     }
   }
 
@@ -122,7 +124,19 @@ class GooglePlacesService implements IPlacesService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Places API search failed: ${response.statusText} - ${errorText}`);
+        console.error('[Google Places API Error]');
+        console.error('  Status:', response.status, response.statusText);
+        console.error('  Response:', errorText);
+        console.error('  API Key (first 20 chars):', this.apiKey?.substring(0, 20) + '...');
+
+        // Parse the error for better messaging
+        try {
+          const errorJson = JSON.parse(errorText);
+          const errorMessage = errorJson.error?.message || errorJson.error?.status || response.statusText;
+          throw new Error(`Places API error: ${errorMessage}`);
+        } catch {
+          throw new Error(`Places API search failed: ${response.statusText} - ${errorText}`);
+        }
       }
 
       const data = await response.json() as any;
@@ -281,7 +295,7 @@ class GooglePlacesService implements IPlacesService {
     try {
       const url = this.getPhotoUrl(photoName, maxWidth);
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch photo: ${response.statusText}`);
       }
@@ -290,7 +304,7 @@ class GooglePlacesService implements IPlacesService {
       const buffer = await blob.arrayBuffer();
       const base64 = Buffer.from(buffer).toString('base64');
       const contentType = response.headers.get('content-type') || 'image/jpeg';
-      
+
       return `data:${contentType};base64,${base64}`;
     } catch (error: any) {
       console.error('[Google Places Service] Get photo error:', error.message);
