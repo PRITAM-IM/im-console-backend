@@ -194,9 +194,8 @@ This is a MARKETING POSTER - text clarity is critical.`;
 }
 
 /**
- * Create a universal, dynamic prompt for hotel marketing posters
- * Works for ANY hotel in ANY location worldwide
- * Focuses on clear text, professional design, and revenue-driving messaging
+ * Create Instagram-optimized marketing posts
+ * Following Canva's clean, minimal design principles for maximum engagement
  */
 function createImagePrompt(options: CampaignImageOptions): string {
     const {
@@ -210,110 +209,168 @@ function createImagePrompt(options: CampaignImageOptions): string {
         city
     } = options;
 
-    // Build the marketing-focused prompt with EXTREME emphasis on text clarity
-    const prompt = `Create a professional hotel marketing poster for social media advertising.
+    // Canva-style Instagram post prompt with improved heading design
+    const prompt = `Create a STUNNING, MODERN Instagram post for ${hotelName} - professional hotel marketing design.
 
-**CRITICAL TEXT REQUIREMENTS - THIS IS THE MOST IMPORTANT PART:**
+INSTAGRAM FORMAT (Critical):
+- Aspect ratio: 1:1 SQUARE (1080x1080px)
+- Mobile-first design - must look perfect on phone screens
+- Clean, modern layout with strategic white space
+- Scroll-stopping, save-worthy visual
 
-YOU MUST INCLUDE EXACTLY THIS TEXT, LARGE AND CLEARLY READABLE:
+PHOTOGRAPHY STYLE:
+- Professional travel photography of ${city}
+- Golden hour lighting (warm, inviting, cinematic)
+- Authentic location, recognizable landmarks
+- Natural depth of field (sharp subject, soft background)
+- High-quality, editorial standard
+- Camera: Canon EOS R5, 35mm lens, f/2.8, ISO 400
 
-**TEXT #1 - HOTEL NAME (Top of image):**
-"${hotelName}"
-- Font: Simple, bold sans-serif (like Arial Black or Helvetica Bold)
-- Size: EXTREMELY LARGE - at least 15% of image height
-- Color: Pure white OR bright gold
-- Background: Dark semi-transparent overlay behind text for contrast
-- Effect: Thick black outline/stroke (3-5px) around each letter
-- Position: Top center, with 10% margin from top edge
-- MUST be the first thing viewers see
+MODERN DESIGN LAYOUT:
+Use a CLEAN, BOLD approach with strong visual hierarchy:
 
-**TEXT #2 - EVENT NAME (Center of image):**
+═══════════════════════════════════
+TOP SECTION (12% of image):
+Subtle dark gradient overlay (rgba(0,0,0,0.5))
+Text: "${hotelName}"
+Font: Modern sans-serif (Poppins/Inter), 32pt, UPPERCASE, letter-spacing: 2px
+Color: White (90% opacity)
+Alignment: Center
+Style: Minimalist, elegant
+═══════════════════════════════════
+
+MIDDLE SECTION (45% of image):
+CLEAN PHOTOGRAPH - minimal text overlay
+Let the stunning ${city} image be the hero
+Show authentic ${eventType} atmosphere
+Slight blur effect on edges for depth
+
+═══════════════════════════════════
+BOTTOM SECTION (43% of image):
+Strong gradient overlay (rgba(0,0,0,0) to rgba(0,0,0,0.85))
+
+MAIN HEADING (Eye-catching):
 "${eventName}"
-- Font: Bold, thick sans-serif (like Impact or Arial Black)
-- Size: MASSIVE - at least 20% of image height, LARGEST text on poster
-- Color: Bright, high-contrast color (white, gold, or bright orange)
-- Background: Dark semi-transparent box behind text
-- Effect: Very thick black outline (5-8px) + subtle glow
-- Position: Dead center of image
-- MUST dominate the visual hierarchy
+Font: Extra bold sans-serif (Montserrat Black/Poppins Bold), 64pt
+Color: WHITE with vibrant accent
+Style: Multi-line if needed, max 2 lines
+Effect: Subtle glow/shadow for depth
+Line height: 1.1 (tight, impactful)
+Transform: Slight letter-spacing (1px)
+Position: 60% from top
 
-**TEXT #3 - DATE (Below event name):**
-"${eventDate}"
-- Font: Bold sans-serif
-- Size: LARGE - at least 8% of image height
-- Color: White or gold
-- Background: Dark semi-transparent bar
-- Position: Directly below event name
+ACCENT LINE (Above or below heading):
+Decorative element: Thin horizontal line or dots
+Color: Bright orange (#FF6B35) or Gold (#FFD700)
+Width: 60px
+Style: Modern, minimal
 
-**TEXT #4 - CALL TO ACTION (Bottom of image):**
+PRICING HIGHLIGHT (Below heading):
+"SPECIAL RATES FROM ₹3,999/NIGHT"
+Font: Medium sans-serif (Poppins Medium), 36pt
+Color: Bright gold (#FFD700)
+Background: Subtle dark pill shape (rgba(0,0,0,0.6))
+Padding: 8px 24px
+Border-radius: 20px
+Effect: Subtle glow
+
+DATE & DETAILS (Below pricing):
+"Event Date: ${eventDate}"
+Font: Regular sans-serif (Inter/Poppins), 28pt
+Color: White (70% opacity)
+Style: Clean, minimal
+
+CTA BUTTON (Bottom, prominent):
 "BOOK NOW"
-- Font: Extra bold sans-serif
-- Size: VERY LARGE - at least 12% of image height
-- Color: Bright orange, gold, or white
-- Background: Solid dark bar across bottom (like a button)
-- Effect: Make it look like a clickable button
-- Position: Bottom 15% of image, centered
+Style: Modern rounded button
+Background: Vibrant gradient (orange to red: #FF6B35 to #FF4500)
+Text: White, bold (Poppins Bold), 40pt
+Padding: 18px 56px
+Border-radius: 30px (pill shape)
+Shadow: Strong drop shadow (0 4px 12px rgba(255,107,53,0.4))
+Effect: Slightly elevated, clickable appearance
+═══════════════════════════════════
 
-**CRITICAL TEXT RULES - FOLLOW EXACTLY:**
-1. Use ONLY 1-2 simple, bold fonts (Arial Black, Helvetica Bold, Impact)
-2. NO decorative or script fonts
-3. NO small text - everything must be LARGE
-4. NO text smaller than 8% of image height
-5. ALWAYS put dark backgrounds behind white text
-6. ALWAYS use thick black outlines on all text
-7. Text must be readable from 5 meters away
-8. Maximum 4 text elements total (hotel, event, date, CTA)
-9. NO additional decorative text or details
-10. Keep it SIMPLE and BOLD
+TYPOGRAPHY RULES (Modern Instagram):
+✓ Maximum 2 font families (Poppins + Inter OR Montserrat + Roboto)
+✓ Bold hierarchy: HUGE heading → Medium pricing → Small details
+✓ High contrast: White on dark, gold accents
+✓ Generous line spacing for readability
+✓ Letter-spacing on uppercase text
+✓ Modern, clean sans-serif fonts only
 
-**VISUAL COMPOSITION:**
+COLOR PALETTE (Vibrant & Modern):
+- Primary: Pure white (#FFFFFF)
+- Accent 1: Bright gold (#FFD700) for pricing
+- Accent 2: Vibrant orange (#FF6B35) for CTA
+- Accent 3: Deep red (#FF4500) for gradient
+- Overlays: Dark gradients (rgba(0,0,0,0.5-0.9))
+- Background: Natural warm photo tones
 
-**Background Scene:**
-- Professional photograph of ${city}
-- Show authentic local character and atmosphere
-- Golden hour lighting (warm, inviting)
-- Slightly blurred background to make text pop
-- Leave clear space for text (top 25%, center 30%, bottom 20%)
+VISUAL HIERARCHY (Critical):
+1. Event name (LARGEST, most prominent)
+2. Pricing (BRIGHT, attention-grabbing)
+3. CTA button (VIBRANT, action-oriented)
+4. Hotel name (subtle, top)
+5. Date (minimal, supporting info)
 
-**Event Atmosphere (${eventType}):**
-${getEventSceneDescription(eventType, eventName, eventDescription)}
+WHITE SPACE STRATEGY:
+✓ 35% of image should be breathing room
+✓ Clear margins: 6% from all edges
+✓ Generous padding in text containers
+✓ Uncluttered middle section (photo hero)
+✓ Balanced composition
 
-**Layout Requirements:**
-- Landscape orientation (16:9 ratio preferred)
-- Rule of thirds composition
-- Top 25% reserved for hotel name
-- Center 30% reserved for event name
-- Bottom 20% reserved for call-to-action
-- Background should be slightly darker to make text stand out
+MOBILE OPTIMIZATION:
+✓ Heading readable from thumbnail view
+✓ Minimum font size: 28pt
+✓ High contrast ratios (7:1 for heading)
+✓ Touch-friendly CTA (minimum 44px height)
+✓ No critical text smaller than 24pt
 
-**Photography Style:**
-- Professional quality
-- Warm, inviting colors
-- Good depth of field
-- Natural lighting
-- High contrast areas for text placement
+INSTAGRAM TRENDS 2025:
+✓ Bold, confident typography
+✓ Vibrant accent colors
+✓ Gradient buttons
+✓ Pill-shaped elements
+✓ Subtle glow effects
+✓ Clean, modern aesthetic
+✓ Scroll-stopping design
+✓ Save-worthy content
 
-**ABSOLUTELY FORBIDDEN:**
-- Small, decorative text
-- Script or cursive fonts
-- Text without outlines or backgrounds
-- Cluttered composition
-- More than 4 text elements
-- Text smaller than 8% of image height
-- Low contrast text
-- Text over busy backgrounds without overlay
+PHOTOREALISTIC ELEMENTS:
+✓ Natural film grain texture
+✓ Authentic bokeh effect
+✓ Realistic lighting and shadows
+✓ Professional color grading
+✓ Subtle vignette for focus
+✓ Real ${city} landmarks/scenery
+✓ Cinematic depth
 
-**FINAL CHECKLIST - IMAGE MUST HAVE:**
-✓ Hotel name in LARGE bold text at top
-✓ Event name in MASSIVE bold text in center
-✓ Date in LARGE text below event
-✓ "BOOK NOW" in LARGE text at bottom
-✓ All text has dark backgrounds or thick outlines
-✓ Simple, bold fonts only
-✓ High contrast everywhere
-✓ Professional ${city} background
+AVOID (Critical):
+✗ Cluttered layouts
+✗ Weak, thin fonts for headings
+✗ Low contrast text
+✗ Text over busy areas without overlay
+✗ Tiny text (under 24pt)
+✗ Flat, boring buttons
+✗ Decorative/script fonts
+✗ Excessive effects
 
-This is a MARKETING POSTER - text clarity is MORE IMPORTANT than artistic beauty.`;
+FINAL CHECKLIST:
+✓ 1:1 square format for Instagram
+✓ BOLD, eye-catching event name (64pt+)
+✓ Vibrant gradient CTA button
+✓ Semi-transparent overlays for text
+✓ 2 modern fonts maximum
+✓ Strategic white space (35%)
+✓ Mobile-optimized sizes
+✓ Strong visual hierarchy
+✓ Professional ${city} photography
+✓ Scroll-stopping appeal
+✓ Ready to post immediately
+
+This must look like a PREMIUM INSTAGRAM POST from a top hotel brand - bold, modern, clean, with an eye-catching heading that demands attention and drives immediate bookings.`;
 
     return prompt;
 }

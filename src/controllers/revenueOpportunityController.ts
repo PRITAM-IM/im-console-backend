@@ -489,6 +489,7 @@ export const generateCampaignImage = async (req: AuthRequest, res: Response) => 
             data: {
                 imageUrl,
                 prompt,
+                provider,
             },
         });
     } catch (error: any) {
