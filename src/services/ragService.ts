@@ -386,7 +386,7 @@ export async function retrieveContext(
   userQuery: string,
   projectId: string,
   topK: number = 10, // Increased from 5 to get more comprehensive context
-  minScore: number = 0.65 // Slightly lowered to capture more relevant chunks
+  minScore: number = 0.50 // Lowered for better recall
 ): Promise<VectorQueryResult[]> {
   try {
     console.log(`🔍 Retrieving context for query: "${userQuery}"`);
@@ -420,7 +420,7 @@ export async function retrieveContextWithHistory(
   currentStartDate: string,
   currentEndDate: string,
   topK: number = 10,
-  minScore: number = 0.65
+  minScore: number = 0.50 // Lowered for better recall
 ): Promise<{ currentPeriod: VectorQueryResult[]; historicalPeriod: VectorQueryResult[] }> {
   try {
     console.log(`🔍 Retrieving context with history for query: "${userQuery}"`);
@@ -428,8 +428,8 @@ export async function retrieveContextWithHistory(
     // Generate embedding once for efficiency
     const queryEmbedding = await embeddingService.generateEmbedding(userQuery);
 
-    // Query for current period data
-    const currentResults = await vectorService.queryVectors({
+    // Query for current period data (with date filter)
+    let currentResults = await vectorService.queryVectors({
       embedding: queryEmbedding,
       projectId,
       topK: Math.floor(topK * 0.7), // 70% for current period
@@ -439,6 +439,18 @@ export async function retrieveContextWithHistory(
         endDate: currentEndDate,
       },
     });
+
+    // If no results with date filter, try without date filter (use all indexed data)
+    if (currentResults.length === 0) {
+      console.log(`⚠️ No results with date filter, querying without date restrictions...`);
+      currentResults = await vectorService.queryVectors({
+        embedding: queryEmbedding,
+        projectId,
+        topK,
+        minScore,
+        // No dateRange - retrieve all available data
+      });
+    }
 
     // Calculate previous month date range
     const currentStart = new Date(currentStartDate);
@@ -465,7 +477,7 @@ export async function retrieveContextWithHistory(
     };
   } catch (error: any) {
     console.error('❌ Error retrieving historical context:', error.message);
-    // Fallback to regular context retrieval
+    // Fallback to regular context retrieval (no date filter)
     const fallbackResults = await retrieveContext(userQuery, projectId, topK, minScore);
     return {
       currentPeriod: fallbackResults,
@@ -483,10 +495,10 @@ export function buildContextFromChunks(chunks: VectorQueryResult[], label?: stri
     return 'No relevant data found in the vector database.';
   }
 
-  let context = label 
-    ? `${label}:\n\n` 
+  let context = label
+    ? `${label}:\n\n`
     : 'Relevant Data Retrieved from Vector Database:\n\n';
-  
+
   chunks.forEach((chunk, index) => {
     context += `[Source ${index + 1}] (Relevance: ${(chunk.score * 100).toFixed(1)}%):\n`;
     context += chunk.text;
@@ -549,7 +561,7 @@ export async function needsReindexing(
     // Check if data is stale
     const maxAgeMs = maxAgeHours * 60 * 60 * 1000;
     const isStale = await vectorService.isProjectDataStale(projectId, maxAgeMs);
-    
+
     if (isStale) {
       console.log(`⏰ Project ${projectId} data is older than ${maxAgeHours} hours - needs re-indexing`);
       return true;

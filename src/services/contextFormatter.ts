@@ -45,6 +45,59 @@ export function formatMetricsForContext(metrics: AggregatedMetrics): string {
   sections.push(`Period: ${metrics.dateRange.startDate} to ${metrics.dateRange.endDate}`);
   sections.push(`All currency values are in Indian Rupees (INR/₹)\n`);
 
+  // DATA AVAILABILITY SUMMARY - Critical for AI to know what data exists
+  sections.push(`## ⚠️ DATA AVAILABILITY SUMMARY FOR THIS PERIOD`);
+  sections.push(`This section tells you which platforms have data and which don't for the requested period.\n`);
+
+  const platformsWithData: string[] = [];
+  const platformsWithoutData: string[] = [];
+
+  // Check which platforms have actual data
+  if (metrics.trafficMetrics && metrics.trafficMetrics.sessions > 0) {
+    platformsWithData.push('Google Analytics');
+  }
+  if (metrics.individualPlatformMetrics?.googleAds) {
+    platformsWithData.push('Google Ads');
+  }
+  if (metrics.individualPlatformMetrics?.metaAds) {
+    platformsWithData.push('Meta Ads');
+  }
+  if (metrics.individualPlatformMetrics?.facebook) {
+    platformsWithData.push('Facebook');
+  }
+  if (metrics.individualPlatformMetrics?.instagram) {
+    platformsWithData.push('Instagram');
+  }
+  if (metrics.individualPlatformMetrics?.searchConsole) {
+    platformsWithData.push('Search Console');
+  }
+  if (metrics.individualPlatformMetrics?.youtube) {
+    platformsWithData.push('YouTube');
+  }
+
+  // Check connected platforms that have NO data
+  for (const platform of metrics.platformConnections.connectedPlatforms) {
+    if (!platformsWithData.includes(platform)) {
+      platformsWithoutData.push(platform);
+    }
+  }
+
+  if (platformsWithData.length > 0) {
+    sections.push(`✅ **Platforms WITH data for this period:**`);
+    sections.push(`${platformsWithData.join(', ')}\n`);
+  }
+
+  if (platformsWithoutData.length > 0) {
+    sections.push(`❌ **Connected platforms with NO data for this period:**`);
+    sections.push(`${platformsWithoutData.join(', ')}`);
+    sections.push(`\n**IMPORTANT FOR AI**: If user asks about these platforms, tell them:`);
+    sections.push(`"I don't have ${platformsWithoutData.join('/')} data for ${metrics.dateRange.startDate} to ${metrics.dateRange.endDate}.`);
+    sections.push(`Try asking: 'Show me [platform] data for the last 30 days' or 'Show me [platform] data for last month'"`);
+    sections.push(``);
+  }
+
+  sections.push(`---\n`);
+
   // Platform Connections
   sections.push(`## Platform Connections`);
   sections.push(`Total Platforms: ${metrics.platformConnections.total}`);
@@ -93,6 +146,54 @@ export function formatMetricsForContext(metrics: AggregatedMetrics): string {
   // Individual Platform Metrics
   if (metrics.individualPlatformMetrics) {
     sections.push(`## Individual Platform Metrics\n`);
+
+    // First, identify which platforms have no data
+    const platformsWithNoData: string[] = [];
+    const platformsWithFallbackData: string[] = [];
+
+    if (!metrics.individualPlatformMetrics.googleAds) {
+      if (metrics.platformConnections.connectedPlatforms.includes('Google Ads')) {
+        platformsWithNoData.push('Google Ads');
+      }
+    }
+    if (!metrics.individualPlatformMetrics.metaAds) {
+      if (metrics.platformConnections.connectedPlatforms.includes('Meta Ads')) {
+        platformsWithNoData.push('Meta Ads');
+      }
+    }
+    if (!metrics.individualPlatformMetrics.facebook) {
+      if (metrics.platformConnections.connectedPlatforms.includes('Facebook')) {
+        platformsWithNoData.push('Facebook');
+      }
+    }
+    if (!metrics.individualPlatformMetrics.instagram) {
+      if (metrics.platformConnections.connectedPlatforms.includes('Instagram')) {
+        platformsWithNoData.push('Instagram');
+      }
+    }
+    // YouTube and LinkedIn: check via platform connections since they may not be in the metrics type
+    if (metrics.platformConnections.connectedPlatforms.includes('YouTube')) {
+      // YouTube data comes through Google Analytics, check if we have any traffic from it
+      platformsWithNoData.push('YouTube');
+    }
+    if (!metrics.individualPlatformMetrics.searchConsole) {
+      if (metrics.platformConnections.connectedPlatforms.includes('Search Console')) {
+        platformsWithNoData.push('Search Console');
+      }
+    }
+    // LinkedIn: check via platform connections
+    if (metrics.platformConnections.connectedPlatforms.includes('LinkedIn')) {
+      platformsWithNoData.push('LinkedIn');
+    }
+
+    // Add note about platforms with no data for the requested period
+    if (platformsWithNoData.length > 0) {
+      sections.push(`### ⚠️ Data Availability Notice`);
+      sections.push(`The following CONNECTED platforms have NO data for the requested period (${metrics.dateRange.startDate} to ${metrics.dateRange.endDate}):`);
+      sections.push(`- ${platformsWithNoData.join(', ')}`);
+      sections.push(`\nIMPORTANT: If the user asks about these platforms, suggest trying a longer date range like "last 30 days" or "last month".`);
+      sections.push('');
+    }
 
     // Meta Ads
     if (metrics.individualPlatformMetrics.metaAds) {
@@ -150,6 +251,25 @@ export function formatMetricsForContext(metrics: AggregatedMetrics): string {
       sections.push(`- Total Impressions: ${formatNumber(gsc.impressions)}`);
       sections.push(`- Average CTR: ${formatPercent(gsc.ctr)}`);
       sections.push(`- Average Position: ${gsc.avgPosition.toFixed(1)}`);
+      sections.push('');
+    }
+
+    // YouTube
+    if (metrics.individualPlatformMetrics.youtube) {
+      const yt = metrics.individualPlatformMetrics.youtube;
+      sections.push(`### YouTube`);
+      if (yt._isFallbackData) {
+        sections.push(`**Note: Showing last 30 days data (${yt._fallbackPeriod}) as no data available for requested period**`);
+      }
+      sections.push(`- Views: ${formatNumber(yt.views)}`);
+      sections.push(`- Watch Time: ${formatDuration(yt.watchTime)} (${formatNumber(yt.watchTime)} minutes)`);
+      sections.push(`- Subscribers Gained: ${formatNumber(yt.subscribers)}`);
+      sections.push(`- Likes: ${formatNumber(yt.likes)}`);
+      sections.push(`- Comments: ${formatNumber(yt.comments)}`);
+      sections.push(`- Shares: ${formatNumber(yt.shares)}`);
+      if (yt.videosPublished > 0) {
+        sections.push(`- Videos Published: ${formatNumber(yt.videosPublished)}`);
+      }
       sections.push('');
     }
   }

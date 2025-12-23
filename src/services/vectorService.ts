@@ -16,7 +16,7 @@ import { v4 as uuidv4 } from '../utils/uuid';
 
 const UPSERT_BATCH_SIZE = 100; // Pinecone supports up to 1000, but we'll use 100 for safety
 const DEFAULT_TOP_K = 5;
-const DEFAULT_MIN_SCORE = 0.7;
+const DEFAULT_MIN_SCORE = 0.5; // Lowered for better recall
 
 /**
  * Upsert vectors to Pinecone
@@ -160,11 +160,13 @@ export async function queryVectors(params: QueryVectorParams): Promise<VectorQue
       projectId: { $eq: projectId },
     };
 
-    // Add date range filter if provided
+    // Note: Date range filtering removed because Pinecone's $gte/$lte operators
+    // only work with numbers, not strings. Vector similarity search will return
+    // the most relevant chunks regardless of date, and we rely on the TTL to
+    // expire old data. For historical queries, use Milvus async RAG which has
+    // proper timestamp indexes.
     if (dateRange) {
-      filter.startDate = { $gte: dateRange.startDate };
-      filter.endDate = { $lte: dateRange.endDate };
-      console.log(`📅 Filtering by date range: ${dateRange.startDate} to ${dateRange.endDate}`);
+      console.log(`📅 Date range requested: ${dateRange.startDate} to ${dateRange.endDate} (filtering via vector similarity)`);
     }
 
     const queryResponse = await index.namespace(namespace || '').query({
@@ -197,8 +199,8 @@ export async function queryVectors(params: QueryVectorParams): Promise<VectorQue
             dateRangeLabel: metadata.dateRangeLabel,
             category: metadata.category,
             textContent: metadata.textContent,
-            metricsSnapshot: typeof metadata.metricsSnapshot === 'string' 
-              ? JSON.parse(metadata.metricsSnapshot) 
+            metricsSnapshot: typeof metadata.metricsSnapshot === 'string'
+              ? JSON.parse(metadata.metricsSnapshot)
               : metadata.metricsSnapshot,
             isFallbackData: metadata.isFallbackData === true || metadata.isFallbackData === 'true',
             fallbackPeriod: metadata.fallbackPeriod,
@@ -209,7 +211,7 @@ export async function queryVectors(params: QueryVectorParams): Promise<VectorQue
       });
 
     console.log(`✅ Found ${results.length} matching vectors (${queryResponse.matches.length} total, ${queryResponse.matches.length - results.length} filtered by score)`);
-    
+
     // Log similarity scores for debugging
     if (results.length > 0) {
       console.log('📊 Similarity scores:', results.map(r => `${r.metadata.category}: ${r.score.toFixed(3)}`).join(', '));
@@ -251,7 +253,7 @@ export async function deleteExpiredVectors(namespace?: string): Promise<void> {
   try {
     const index = getPineconeIndex();
     const now = new Date().toISOString();
-    
+
     console.log(`🗑️ Deleting expired vectors (before ${now})...`);
 
     await index.namespace(namespace || '').deleteMany({
@@ -291,7 +293,7 @@ export async function hasProjectVectors(
 ): Promise<boolean> {
   try {
     const index = getPineconeIndex();
-    
+
     // Query with a dummy vector just to check if any records exist
     const dummyVector = new Array(1536).fill(0);
     const response = await index.namespace(namespace || '').query({
@@ -320,7 +322,7 @@ export async function isProjectDataStale(
   try {
     const index = getPineconeIndex();
     const cutoffDate = new Date(Date.now() - maxAge).toISOString();
-    
+
     // Query with a dummy vector to check if any recent records exist
     const dummyVector = new Array(1536).fill(0);
     const response = await index.namespace(namespace || '').query({

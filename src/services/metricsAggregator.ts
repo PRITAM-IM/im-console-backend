@@ -2,6 +2,7 @@ import analyticsService from './analyticsService';
 import Project from '../models/Project';
 import mongoose from 'mongoose';
 import axios from 'axios';
+import youtubeDataService from './youtubeDataService';
 
 /**
  * Metrics Aggregator Service
@@ -108,6 +109,17 @@ export interface AggregatedMetrics {
       _isFallbackData?: boolean;
       _fallbackPeriod?: string;
     };
+    youtube?: {
+      views: number;
+      watchTime: number;
+      subscribers: number;
+      likes: number;
+      comments: number;
+      shares: number;
+      videosPublished: number;
+      _isFallbackData?: boolean;
+      _fallbackPeriod?: string;
+    };
   };
   dateRange: {
     startDate: string;
@@ -150,16 +162,16 @@ export async function getProjectMetrics(
     ]);
 
     // Calculate conversion rate
-    const conversionRate = overviewData.sessions > 0 
-      ? (overviewData.conversions / overviewData.sessions) * 100 
+    const conversionRate = overviewData.sessions > 0
+      ? (overviewData.conversions / overviewData.sessions) * 100
       : 0;
 
     // Calculate previous conversion rate for change
     const prevSessions = overviewData.sessions / (1 + overviewData.sessionsChange / 100);
     const prevConversions = overviewData.conversions / (1 + overviewData.conversionsChange / 100);
     const prevConversionRate = prevSessions > 0 ? (prevConversions / prevSessions) * 100 : 0;
-    const conversionRateChange = prevConversionRate > 0 
-      ? ((conversionRate - prevConversionRate) / prevConversionRate) * 100 
+    const conversionRateChange = prevConversionRate > 0
+      ? ((conversionRate - prevConversionRate) / prevConversionRate) * 100
       : 0;
 
     // Process channel data
@@ -391,7 +403,7 @@ async function fetchIndividualPlatformMetrics(
   const fetchWithFallback = async (cacheKey: string, dateKey: string) => {
     // Try primary date range first
     let data = await analyticsService.getCachedData(projectId, cacheKey, dateKey);
-    
+
     // If no data, try last 30 days as fallback
     if (!data || Object.keys(data).length === 0) {
       const today = new Date();
@@ -399,19 +411,19 @@ async function fetchIndividualPlatformMetrics(
       yesterday.setDate(yesterday.getDate() - 1);
       const thirtyDaysAgo = new Date(yesterday);
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
-      
+
       const fallbackStart = thirtyDaysAgo.toISOString().split('T')[0];
       const fallbackEnd = yesterday.toISOString().split('T')[0];
       const fallbackKey = `${fallbackStart}_${fallbackEnd}`;
-      
+
       data = await analyticsService.getCachedData(projectId, cacheKey, fallbackKey);
-      
+
       if (data && Object.keys(data).length > 0) {
         // Mark that this is fallback data
         return { ...data, _isFallbackData: true, _fallbackPeriod: `${fallbackStart} to ${fallbackEnd}` };
       }
     }
-    
+
     return data;
   };
 
@@ -424,7 +436,7 @@ async function fetchIndividualPlatformMetrics(
         const totalClicks = data.reduce((sum: number, camp: any) => sum + (camp.clicks || 0), 0);
         const totalImpressions = data.reduce((sum: number, camp: any) => sum + (camp.impressions || 0), 0);
         const totalConversions = data.reduce((sum: number, camp: any) => sum + (camp.conversions || 0), 0);
-        
+
         metrics.googleAds = {
           spend: totalSpend,
           clicks: totalClicks,
@@ -514,6 +526,41 @@ async function fetchIndividualPlatformMetrics(
       }
     } catch (error) {
       console.log('[MetricsAggregator] Failed to fetch Search Console metrics:', error);
+    }
+  }
+
+  // Fetch YouTube metrics - call service directly for fresh data
+  if (project.youtubeChannelId) {
+    try {
+      console.log(`[MetricsAggregator] Fetching YouTube metrics for channel: ${project.youtubeChannelId}`);
+
+      // Get access token using youtubeDataService
+      const accessToken = await youtubeDataService.getAccessToken(projectId);
+
+      const ytData = await youtubeDataService.getOverviewMetrics(
+        project.youtubeChannelId,
+        accessToken,
+        { startDate, endDate }
+      );
+
+      if (ytData) {
+        metrics.youtube = {
+          views: ytData.views || 0,
+          watchTime: ytData.estimatedMinutesWatched || 0,
+          subscribers: ytData.subscribersGained || 0,
+          likes: ytData.likes || 0,
+          comments: ytData.comments || 0,
+          shares: ytData.shares || 0,
+          videosPublished: 0, // Not available in overview metrics
+          _isFallbackData: false,
+          _fallbackPeriod: '',
+        };
+        console.log(`[MetricsAggregator] ✅ YouTube metrics fetched: ${ytData.views} views, ${ytData.subscribersGained} subscribers`);
+      } else {
+        console.log(`[MetricsAggregator] ⚠️ No YouTube data returned from service`);
+      }
+    } catch (error: any) {
+      console.log('[MetricsAggregator] Failed to fetch YouTube metrics:', error.message);
     }
   }
 

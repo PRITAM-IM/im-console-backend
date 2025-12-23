@@ -391,13 +391,13 @@ export async function generateEventInsights(
     pricingStrategy: string;
 }> {
     try {
-        const prompt = `You are a hotel revenue management expert. Analyze this upcoming event and provide strategic recommendations for a hotel.
+        const prompt = `You are a hotel revenue management expert for Indian hotels. Analyze this upcoming event and provide strategic recommendations.
 
 **Event Details:**
 - Name: ${eventData.name}
 - Type: ${eventData.type}
-- Date: ${eventData.startDate.toLocaleDateString()} to ${eventData.endDate.toLocaleDateString()}
-- Location: ${eventData.location.city}
+- Date: ${eventData.startDate.toLocaleDateString('en-IN')} to ${eventData.endDate.toLocaleDateString('en-IN')}
+- Location: ${eventData.location.city}, India
 - Distance from hotel: ${distanceKm.toFixed(1)} km
 - Expected Attendance: ${eventData.expectedAttendance || 'Unknown'}
 - Description: ${eventData.description}
@@ -408,9 +408,9 @@ Provide a JSON response with:
 1. revenueOpportunity: "High", "Medium", or "Low"
 2. estimatedRoomDemand: Number (estimated rooms that could be booked)
 3. recommendedCampaignStart: ISO date (when to start marketing, typically 2-3 months before)
-4. suggestedActions: Array of 3-5 specific marketing actions
+4. suggestedActions: Array of 3-5 specific marketing actions relevant to Indian audience
 5. targetAudience: Description of who to target
-6. pricingStrategy: Pricing recommendation
+6. pricingStrategy: Pricing recommendation in INR context (use ₹ symbol)
 
 Format as valid JSON only.`;
 
@@ -459,7 +459,7 @@ Format as valid JSON only.`;
                 'Partner with event organizers',
             ],
             targetAudience: `${eventData.type} attendees`,
-            pricingStrategy: 'Increase rates by 20-30% during event dates',
+            pricingStrategy: 'Increase rates by 20-30% during event dates. Consider ₹500-₹1500 premium per night.',
         };
     }
 }

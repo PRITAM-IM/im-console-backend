@@ -1,6 +1,11 @@
 import { Tiktoken, encodingForModel } from 'js-tiktoken';
-import { ChatMessage } from './chatService';
 import { OPENAI_CONFIG } from '../config/openai';
+
+// Define ChatMessage interface locally
+interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
 
 /**
  * Token Service
@@ -49,16 +54,16 @@ export function countTokens(text: string): number {
  */
 export function countMessagesTokens(messages: ChatMessage[]): number {
   let totalTokens = 0;
-  
+
   for (const message of messages) {
     // Each message has some overhead (role, formatting, etc.)
     totalTokens += 4; // Overhead per message
     totalTokens += countTokens(message.role);
     totalTokens += countTokens(message.content);
   }
-  
+
   totalTokens += 2; // Additional overhead for the entire request
-  
+
   return totalTokens;
 }
 
@@ -73,11 +78,11 @@ export function checkTokenLimits(
   const messageTokens = countMessagesTokens(messages);
   const responseTokens = maxTokens;
   const estimatedTotal = messageTokens + responseTokens;
-  
+
   // GPT-4 context limit is 8192 tokens, GPT-4-turbo is 128k
   // We'll use a safe limit of 16000 for total (prompt + response)
   const contextLimit = 16000;
-  
+
   return {
     withinLimit: estimatedTotal <= contextLimit,
     estimatedTokens: estimatedTotal,
@@ -93,20 +98,20 @@ export function truncateMessages(
   maxContextTokens: number = 12000
 ): ChatMessage[] {
   if (messages.length === 0) return messages;
-  
+
   // Always keep the system message (first message)
   const systemMessage = messages[0].role === 'system' ? messages[0] : null;
   const otherMessages = systemMessage ? messages.slice(1) : messages;
-  
+
   // Start from the most recent messages and work backwards
   const truncated: ChatMessage[] = [];
   let currentTokens = systemMessage ? countMessagesTokens([systemMessage]) : 0;
-  
+
   // Add messages from most recent to oldest
   for (let i = otherMessages.length - 1; i >= 0; i--) {
     const message = otherMessages[i];
     const messageTokens = countMessagesTokens([message]);
-    
+
     if (currentTokens + messageTokens <= maxContextTokens) {
       truncated.unshift(message);
       currentTokens += messageTokens;
@@ -115,12 +120,12 @@ export function truncateMessages(
       break;
     }
   }
-  
+
   // Prepend system message if it exists
   const result = systemMessage ? [systemMessage, ...truncated] : truncated;
-  
+
   console.log(`[TokenService] Truncated messages from ${messages.length} to ${result.length} (${currentTokens} tokens)`);
-  
+
   return result;
 }
 

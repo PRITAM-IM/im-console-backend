@@ -220,20 +220,26 @@ class GooglePlacesService implements IPlacesService {
         currentOpeningHours: place.currentOpeningHours,
         businessStatus: place.businessStatus,
         priceLevel: place.priceLevel,
-        photos: place.photos?.slice(0, 10).map((photo: any) => ({
+        photos: place.photos?.slice(0, 20).map((photo: any) => ({
           name: photo.name,
           widthPx: photo.widthPx,
           heightPx: photo.heightPx,
         })),
-        reviews: place.reviews?.map((review: any) => ({
-          name: review.name,
-          relativePublishTimeDescription: review.relativePublishTimeDescription,
-          rating: review.rating,
-          text: review.text,
-          originalText: review.originalText,
-          authorAttribution: review.authorAttribution,
-          publishTime: review.publishTime,
-        })),
+        reviews: place.reviews
+          ?.map((review: any) => ({
+            name: review.name,
+            relativePublishTimeDescription: review.relativePublishTimeDescription,
+            rating: review.rating,
+            text: review.text,
+            originalText: review.originalText,
+            authorAttribution: review.authorAttribution,
+            publishTime: review.publishTime,
+          }))
+          .sort((a: any, b: any) => {
+            // Sort by publishTime in descending order (latest first)
+            if (!a.publishTime || !b.publishTime) return 0;
+            return new Date(b.publishTime).getTime() - new Date(a.publishTime).getTime();
+          }),
         editorialSummary: place.editorialSummary?.text,
         types: place.types,
       };

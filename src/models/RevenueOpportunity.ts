@@ -28,6 +28,12 @@ export interface IRevenueOpportunity extends Document {
         generatedAt: Date;
     };
     source: 'eventbrite' | 'serpapi' | 'openrouter' | 'manual';
+    campaignImage?: {
+        url: string;
+        prompt: string;
+        provider: 'gemini' | 'dalle';
+        generatedAt: Date;
+    };
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -96,6 +102,15 @@ const RevenueOpportunitySchema = new Schema<IRevenueOpportunity>(
             type: String,
             enum: ['eventbrite', 'serpapi', 'openrouter', 'manual'],
             required: true,
+        },
+        campaignImage: {
+            url: String,
+            prompt: String,
+            provider: {
+                type: String,
+                enum: ['gemini', 'dalle'],
+            },
+            generatedAt: Date,
         },
         isActive: {
             type: Boolean,

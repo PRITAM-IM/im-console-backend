@@ -1,24 +1,60 @@
-import { openai, OPENAI_CONFIG } from '../config/openai';
 import { ChatMessage, IChatMessage } from '../models/ChatMessage';
 import { ChatConversation, IChatConversation } from '../models/ChatConversation';
 import { ChatContext } from '../models/ChatContext';
-import metricsAggregator, { AggregatedMetrics } from './metricsAggregator';
-import contextFormatter from './contextFormatter';
-import { handleOpenAIError, retryWithBackoff, validateOpenAIConfig } from '../utils/openaiErrorHandler';
-import { checkTokenLimits, truncateMessages } from './tokenService';
+import { AggregatedMetrics } from './metricsAggregator';
 import { ENV } from '../config/env';
 import mongoose from 'mongoose';
-import ragService from './ragService';
+import asyncRagService from './asyncRagService';
+import queryIntentParser from './queryIntentParser';
+
+// Lazy load LangChain to prevent memory issues during initialization
+let ChatOpenAI: any;
+let HumanMessage: any;
+let AIMessage: any;
+let SystemMessage: any;
+let ToolMessage: any;
+let allAgentTools: any[] | null = null;
+
+async function loadLangChainDependencies() {
+  if (ChatOpenAI && allAgentTools) return; // Already loaded
+
+  console.log('[ChatService] 🔄 Loading LangChain dependencies...');
+
+  // Load LangChain modules in parallel (using modern API)
+  const [openai, messages] = await Promise.all([
+    import('@langchain/openai'),
+    import('@langchain/core/messages'),
+  ]);
+
+  ChatOpenAI = openai.ChatOpenAI;
+  HumanMessage = messages.HumanMessage;
+  AIMessage = messages.AIMessage;
+  SystemMessage = messages.SystemMessage;
+  ToolMessage = messages.ToolMessage;
+
+  // Load tools using factory function
+  const { default: createAllAgentTools } = await import('../tools');
+  allAgentTools = await createAllAgentTools();
+
+  console.log('[ChatService] ✅ LangChain dependencies loaded with', allAgentTools.length, 'tools');
+}
 
 /**
- * Chat Service
- * Handles all chat operations including context building, OpenAI calls, and message storage
+ * Agentic RAG Chat Service
+ * 
+ * Refactored from linear RAG pipeline to Agentic RAG using LangChain.js and OpenAI Tool Calling.
+ * 
+ * **Architecture:**
+ * - Agent decides which tools to call based on user query
+ * - Platform tools for quantitative queries (e.g., "What was the CPC for Google Ads yesterday?")
+ * - Milvus tool for qualitative queries (e.g., "What are my ROAS preferences?")
+ * - Time parsing tool for relative date conversion
+ * 
+ * **Key Benefits:**
+ * - Eliminates "context not found" errors by proactively fetching data
+ * - Supports parallel tool calling for multi-platform queries
+ * - Maintains conversation history through LangChain memory
  */
-
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
 
 export interface SendMessageParams {
   userId: string;
@@ -37,163 +73,100 @@ export interface SendMessageResponse {
   messageId: string;
   response: string;
   metrics?: AggregatedMetrics;
+  toolsUsed?: string[];
 }
 
 /**
- * Build context from project metrics
+ * Get default date range (last 7 days)
  */
-async function buildContextFromProject(
+function getDefaultDateRange(): { startDate: string; endDate: string } {
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() - 1); // Yesterday
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - 6); // 7 days ago
+
+  return {
+    startDate: startDate.toISOString().split('T')[0],
+    endDate: endDate.toISOString().split('T')[0],
+  };
+}
+
+/**
+ * Build the Avi system prompt with enhanced tool-calling instructions
+ */
+function buildAviSystemPrompt(
   projectId: string,
-  startDate: string,
-  endDate: string
-): Promise<{ context: string; metrics: AggregatedMetrics }> {
-  console.log(`[ChatService] Building context for project ${projectId}`);
+  userId: string,
+  connectedPlatforms: string[],
+  notConnectedPlatforms: string[],
+  pageContext?: string
+): string {
+  // Get current date in a clear format
+  const today = new Date();
+  const currentDate = today.toISOString().split('T')[0]; // YYYY-MM-DD
+  const currentDateReadable = today.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
 
-  // Fetch aggregated metrics
-  const metrics = await metricsAggregator.getProjectMetrics(projectId, startDate, endDate);
+  const basePrompt = `You are Avi, an expert AI marketing analyst and data consultant for hotel and hospitality businesses.
 
-  // Format metrics as natural language context
-  const context = contextFormatter.formatMetricsForContext(metrics);
+**IMPORTANT - Current Date Information:**
+- Today's Date: ${currentDateReadable}
+- Today in ISO format: ${currentDate}
+- When the user asks about "yesterday", "last week", "last month", etc., calculate from TODAY (${currentDate})
+- Default date range (if user doesn't specify): Last 7 days (${getDefaultDateRange().startDate} to ${getDefaultDateRange().endDate})
 
-  return { context, metrics };
-}
+**Your Personality:**
+- Professional yet friendly and approachable
+- Data-driven but explain insights in plain language
+- Proactive in suggesting optimizations and opportunities
+- Honest about limitations and data availability
 
-/**
- * Build context using RAG (Retrieval-Augmented Generation)
- * Retrieves relevant chunks from vector database based on user query
- * Enhanced with historical context for better comparative analysis
- */
-async function buildContextWithRAG(
-  projectId: string,
-  userMessage: string,
-  startDate: string,
-  endDate: string,
-  includeHistory: boolean = true
-): Promise<{ context: string; metrics: AggregatedMetrics; usedRAG: boolean }> {
-  console.log(`[ChatService] 🔮 Building context with RAG for project ${projectId}`);
+**Your Capabilities:**
+You have access to powerful tools that can fetch real-time data from 9 marketing platforms:
+1. Google Analytics (GA4) - Website traffic and behavior
+2. Google Ads - Paid search advertising
+3. Meta Ads - Facebook/Instagram paid advertising
+4. Search Console - Organic search/SEO performance
+5. Facebook - Organic page engagement (followers, likes, reach)
+6. Instagram - Organic profile metrics
+7. YouTube - Video performance
+8. LinkedIn - Professional network engagement
+9. Google Places - Hotel/business details, ratings, reviews (NO date filter needed)
 
-  try {
-    // Fetch aggregated metrics (we still need this for saving to conversation context)
-    const metrics = await metricsAggregator.getProjectMetrics(projectId, startDate, endDate);
+**MANDATORY Tool Usage Rules:**
 
-    // Check if project needs re-indexing
-    const needsIndexing = await ragService.needsReindexing(projectId);
+**RULE 1: ALWAYS USE TOOLS FOR DATA**
+- When user asks about ANY platform (Facebook, Instagram, Google Analytics, etc.), you MUST call the corresponding tool
+- NEVER make assumptions or say "no data available" without actually calling the tool first
+- NEVER respond based on cached knowledge - ALWAYS fetch fresh data
 
-    if (needsIndexing) {
-      console.log(`[ChatService] 📊 Project needs indexing, indexing now...`);
-      await ragService.indexMetrics(metrics, projectId);
-    }
+**RULE 2: Date Handling**
+- Use time_parsing_tool FIRST for relative dates ("yesterday", "last week", "7 days ago")
+- Default date range if not specified: Last 7 days (${getDefaultDateRange().startDate} to ${getDefaultDateRange().endDate})
+- Google Places tool does NOT need dates - it returns current business info
 
-    // Retrieve context with historical data if requested
-    if (includeHistory) {
-      console.log(`[ChatService] 📚 Retrieving context with historical comparison`);
-      const { currentPeriod, historicalPeriod } = await ragService.retrieveContextWithHistory(
-        userMessage,
-        projectId,
-        startDate,
-        endDate,
-        10, // topK - retrieve more chunks for comprehensive context
-        0.65 // minScore
-      );
+**RULE 3: Call the RIGHT tool**
+- "Facebook insights/data/metrics" → facebook_tool (NOT meta_ads_tool)
+- "Instagram organic/followers" → instagram_tool (NOT meta_ads_tool)
+- "Facebook ads/Meta ads" → meta_ads_tool
+- "Hotel details/reviews/rating" → google_places_tool
+- "SEO/organic search/keywords" → search_console_tool
 
-      if (currentPeriod.length === 0 && historicalPeriod.length === 0) {
-        console.warn(`[ChatService] ⚠️ No relevant chunks found, falling back to full context`);
-        const fallbackContext = contextFormatter.formatMetricsForContext(metrics);
-        return { context: fallbackContext, metrics, usedRAG: false };
-      }
+**Examples of CORRECT tool usage:**
+- "Check facebook insights" → facebook_tool with last 7 days dates
+- "Show my hotel reviews" → google_places_tool (no dates needed)
+- "How is Instagram doing?" → instagram_tool with last 7 days dates
+- "Search Console data" → search_console_tool with last 7 days dates
 
-      // Build comprehensive context from current and historical chunks
-      const ragContext = ragService.buildContextWithHistory(currentPeriod, historicalPeriod);
-
-      console.log(`[ChatService] ✅ Built RAG context from ${currentPeriod.length} current + ${historicalPeriod.length} historical chunks`);
-      console.log(`[ChatService] 📉 Enhanced context with month-over-month comparison capability`);
-
-      return { context: ragContext, metrics, usedRAG: true };
-    } else {
-      // Standard retrieval without history
-      const relevantChunks = await ragService.retrieveContext(userMessage, projectId, 10, 0.65);
-
-      if (relevantChunks.length === 0) {
-        console.warn(`[ChatService] ⚠️ No relevant chunks found, falling back to full context`);
-        const fallbackContext = contextFormatter.formatMetricsForContext(metrics);
-        return { context: fallbackContext, metrics, usedRAG: false };
-      }
-
-      // Build context from retrieved chunks
-      const ragContext = ragService.buildContextFromChunks(relevantChunks);
-
-      console.log(`[ChatService] ✅ Built RAG context from ${relevantChunks.length} chunks`);
-
-      return { context: ragContext, metrics, usedRAG: true };
-    }
-  } catch (error: any) {
-    console.error(`[ChatService] ❌ RAG context building failed:`, error.message);
-    console.log(`[ChatService] 🔄 Falling back to traditional context building`);
-
-    // Fallback to traditional approach
-    const metrics = await metricsAggregator.getProjectMetrics(projectId, startDate, endDate);
-    const fallbackContext = contextFormatter.formatMetricsForContext(metrics);
-    return { context: fallbackContext, metrics, usedRAG: false };
-  }
-}
-
-/**
- * Build messages array for OpenAI with comprehensive context
- */
-async function buildMessages(
-  conversationId: string | undefined,
-  userMessage: string,
-  contextData: string,
-  pageContext?: string,
-  userId?: string,
-  projectId?: string
-): Promise<ChatMessage[]> {
-  const messages: ChatMessage[] = [];
-
-  // Build enhanced system prompt with page context
-  let systemPrompt = `${OPENAI_CONFIG.systemPrompt}\n\nCurrent Data Context:\n${contextData}`;
-
-  // Add project and user context
-  if (projectId && userId) {
-    try {
-      const Project = (await import('../models/Project')).default;
-      const User = (await import('../models/User')).default;
-
-      const [project, user] = await Promise.all([
-        Project.findById(projectId).lean(),
-        User.findById(userId).lean()
-      ]);
-
-      if (project && user) {
-        // Build comprehensive project context
-        const connectedPlatforms: string[] = [];
-        const notConnectedPlatforms: string[] = [];
-
-        const platformChecks = [
-          { name: 'Google Analytics', field: project.gaPropertyId, id: project.gaPropertyId },
-          { name: 'Google Ads', field: project.googleAdsCustomerId, id: project.googleAdsCustomerId },
-          { name: 'Search Console', field: project.searchConsoleSiteUrl, id: project.searchConsoleSiteUrl },
-          { name: 'Facebook', field: project.facebookPageId, id: project.facebookPageId },
-          { name: 'Meta Ads', field: project.metaAdsAccountId, id: project.metaAdsAccountId },
-          { name: 'Instagram', field: project.instagram?.igUserId, id: project.instagram?.igUsername },
-          { name: 'YouTube', field: project.youtubeChannelId, id: project.youtubeChannelId },
-          { name: 'LinkedIn', field: project.linkedinPageId, id: project.linkedinPageId },
-          { name: 'Google Places', field: project.googlePlacesId, id: project.googlePlacesData?.displayName }
-        ];
-
-        platformChecks.forEach(({ name, field, id }) => {
-          if (field) {
-            connectedPlatforms.push(id ? `${name} (${id})` : name);
-          } else {
-            notConnectedPlatforms.push(name);
-          }
-        });
-
-        systemPrompt += `\n\n**Project & User Context:**
-- **Project Name:** ${project.name}
-- **Website:** ${project.websiteUrl}
-- **User:** ${user.name} (${user.email})
-- **User Role:** ${user.role === 'admin' ? 'Administrator' : 'Hotel Manager'}
+**Critical Rules:**
+1. NEVER say "I don't have data" without calling the tool first
+2. ALWAYS call the platform tool to get REAL data
+3. If a tool returns an error, acknowledge it and explain the issue
+4. When comparing platforms, use parallel tool calls
 
 **Connected Platforms (${connectedPlatforms.length}/9):**
 ${connectedPlatforms.map(p => `✅ ${p}`).join('\n')}
@@ -201,117 +174,106 @@ ${connectedPlatforms.map(p => `✅ ${p}`).join('\n')}
 ${notConnectedPlatforms.length > 0 ? `**Not Connected (${notConnectedPlatforms.length}):**
 ${notConnectedPlatforms.map(p => `❌ ${p} - Suggest connecting for comprehensive insights`).join('\n')}` : ''}
 
-**Important:** You have full access to data from all connected platforms. Never say "I don't have context" - you have comprehensive marketing data available through the RAG system.`;
+**Current Context:**
+- Project ID: ${projectId}
+- User ID: ${userId}
+${pageContext ? `- Current Page: ${pageContext}` : ''}
+
+**Response Style:**
+- Start with a direct answer to the user's question
+- Include relevant numbers with context (e.g., "Your CPC was $2.50, which is 15% lower than last month")
+- Highlight trends (up/down arrows: ↑ ↓)
+- End with 1-2 actionable recommendations
+- Use emojis sparingly for visual appeal (📊 📈 📉 💡 ⚠️)
+
+Remember: You're not just reporting data - you're a strategic advisor helping them grow their business.`;
+
+  return basePrompt;
+}
+
+/**
+ * Get connected and not connected platforms for a project
+ */
+async function getProjectPlatforms(projectId: string): Promise<{ connected: string[]; notConnected: string[] }> {
+  try {
+    const Project = (await import('../models/Project')).default;
+    const project = await Project.findById(projectId).lean();
+
+    if (!project) {
+      return { connected: [], notConnected: [] };
+    }
+
+    const connectedPlatforms: string[] = [];
+    const notConnectedPlatforms: string[] = [];
+
+    const platformChecks = [
+      { name: 'Google Analytics', field: project.gaPropertyId },
+      { name: 'Google Ads', field: project.googleAdsCustomerId },
+      { name: 'Meta Ads', field: project.metaAdsAccountId },
+      { name: 'Search Console', field: project.searchConsoleSiteUrl },
+      { name: 'Facebook', field: project.facebookPageId },
+      { name: 'Instagram', field: project.instagram?.igUserId },
+      { name: 'YouTube', field: project.youtubeChannelId },
+      { name: 'LinkedIn', field: project.linkedinPageId },
+      { name: 'Google Places', field: project.googlePlacesId },
+    ];
+
+    platformChecks.forEach(({ name, field }) => {
+      if (field) {
+        connectedPlatforms.push(name);
+      } else {
+        notConnectedPlatforms.push(name);
       }
-    } catch (error) {
-      console.error('Error fetching project/user context:', error);
-    }
+    });
+
+    return { connected: connectedPlatforms, notConnected: notConnectedPlatforms };
+  } catch (error) {
+    console.error('[ChatService] Error fetching project platforms:', error);
+    return { connected: [], notConnected: [] };
+  }
+}
+
+/**
+ * Build chat history as LangChain message array from MongoDB conversation
+ */
+async function buildChatHistory(conversationId: string | undefined): Promise<any[]> {
+  const history: any[] = [];
+
+  if (!conversationId) {
+    return history;
   }
 
-  if (pageContext) {
-    const pageContextMap: Record<string, string> = {
-      'overview': 'The user is currently viewing the DASHBOARD OVERVIEW page with summary metrics across all platforms.',
-      'analytics': 'The user is currently viewing the GOOGLE ANALYTICS page with detailed traffic and user behavior data.',
-      'youtube': 'The user is currently viewing the YOUTUBE page with video performance metrics.',
-      'facebook': 'The user is currently viewing the FACEBOOK page with page engagement and post performance.',
-      'instagram': 'The user is currently viewing the INSTAGRAM page with profile and content metrics.',
-      'meta-ads': 'The user is currently viewing the META ADS page with Facebook/Instagram advertising campaign data.',
-      'google-ads': 'The user is currently viewing the GOOGLE ADS page with search and display advertising metrics.',
-      'search-console': 'The user is currently viewing the SEARCH CONSOLE page with SEO and organic search performance.',
-      'linkedin': 'The user is currently viewing the LINKEDIN page with professional network engagement data.'
-    };
-
-    const contextInfo = pageContextMap[pageContext] || '';
-    if (contextInfo) {
-      systemPrompt += `\n\n**Current Page Context:**\n${contextInfo}\nPrioritize information relevant to this page when answering questions.`;
-    }
-  }
-
-  messages.push({
-    role: 'system',
-    content: systemPrompt,
-  });
-
-  // If conversation exists, fetch recent history
-  if (conversationId) {
-    const historyMessages = await ChatMessage.find({
+  try {
+    const messages = await ChatMessage.find({
       conversationId: new mongoose.Types.ObjectId(conversationId),
     })
-      .sort({ timestamp: -1 })
-      .limit(OPENAI_CONFIG.maxConversationHistory)
+      .sort({ timestamp: 1 })
+      .limit(10) // Last 10 messages for context
       .lean();
 
-    // Add history in chronological order (oldest first)
-    historyMessages.reverse().forEach((msg) => {
-      if (msg.role !== 'system') {
-        messages.push({
-          role: msg.role as 'user' | 'assistant',
-          content: msg.content,
-        });
+    for (const msg of messages) {
+      if (msg.role === 'user') {
+        history.push(new HumanMessage(msg.content));
+      } else if (msg.role === 'assistant') {
+        history.push(new AIMessage(msg.content));
       }
-    });
+    }
+  } catch (error) {
+    console.error('[ChatService] Error building chat history:', error);
   }
 
-  // Add current user message
-  messages.push({
-    role: 'user',
-    content: userMessage,
-  });
-
-  return messages;
+  return history;
 }
 
 /**
- * Call OpenAI API with error handling and retry logic
- */
-async function callOpenAI(messages: ChatMessage[]): Promise<string> {
-  // Validate configuration
-  const validation = validateOpenAIConfig();
-  if (!validation.valid) {
-    throw new Error(validation.message || 'OpenAI configuration is invalid');
-  }
-
-  // Check token limits
-  const tokenCheck = checkTokenLimits(messages, OPENAI_CONFIG.maxTokens);
-  if (!tokenCheck.withinLimit) {
-    console.warn('[ChatService] Token limit exceeded, truncating messages');
-    // Truncate to fit within limits
-    const truncatedMessages = truncateMessages(messages, 4000);
-    messages = truncatedMessages as ChatMessage[];
-  }
-
-  // Log token usage
-  console.log(`[ChatService] Estimated tokens: ${tokenCheck.estimatedTokens} total`);
-
-  // Call OpenAI with retry logic
-  const response = await retryWithBackoff(async () => {
-    const completion = await openai.chat.completions.create({
-      model: OPENAI_CONFIG.model,
-      messages: messages,
-      max_tokens: OPENAI_CONFIG.maxTokens,
-      temperature: OPENAI_CONFIG.temperature,
-    });
-
-    return completion.choices[0]?.message?.content || '';
-  });
-
-  if (!response) {
-    throw new Error('OpenAI returned empty response');
-  }
-
-  return response;
-}
-
-/**
- * Save conversation and messages to database
+ * Save conversation and messages to MongoDB
  */
 async function saveConversation(
   userId: string,
   projectId: string,
   conversationId: string | undefined,
   userMessage: string,
-  aiResponse: string,
-  metrics: AggregatedMetrics
+  aiResponse: string
 ): Promise<{ conversationId: string; messageId: string }> {
   let conversation: IChatConversation;
 
@@ -322,11 +284,10 @@ async function saveConversation(
       throw new Error('Conversation not found');
     }
     conversation = foundConversation;
-    // Update last message and timestamp
     conversation.lastMessage = userMessage.length > 200 ? userMessage.substring(0, 200) + '...' : userMessage;
     await conversation.save();
   } else {
-    // Create new conversation - generate title from first message
+    // Create new conversation
     let title = userMessage.trim();
     const maxLength = 50;
     if (title.length > maxLength) {
@@ -343,16 +304,6 @@ async function saveConversation(
       projectId: new mongoose.Types.ObjectId(projectId),
       title,
       lastMessage: userMessage,
-    });
-
-    // Save context snapshot for the conversation
-    await ChatContext.create({
-      conversationId: conversation._id,
-      metrics,
-      dateRange: {
-        startDate: new Date(metrics.dateRange.startDate),
-        endDate: new Date(metrics.dateRange.endDate),
-      },
     });
   }
 
@@ -381,82 +332,191 @@ async function saveConversation(
 }
 
 /**
- * Send a message to Avi and get a response
+ * Handle user corrections for self-learning
+ */
+async function handleUserCorrection(
+  userId: string,
+  projectId: string,
+  message: string
+): Promise<void> {
+  try {
+    const correction = queryIntentParser.detectUserCorrection(message);
+
+    if (correction.isCorrection && correction.instruction) {
+      console.log(`[ChatService] 🧠 Detected user ${correction.correctionType}: "${message.substring(0, 50)}..."`);
+
+      await asyncRagService.storeUserCorrection(
+        userId,
+        projectId,
+        message,
+        correction.instruction,
+        correction.correctionType || 'preference'
+      );
+    }
+  } catch (error) {
+    console.warn('[ChatService] Failed to store user correction:', error);
+  }
+}
+
+/**
+ * Execute tool calls and return results
+ * Automatically injects projectId and userId since LLM doesn't know these values
+ */
+async function executeToolCalls(
+  toolCalls: any[],
+  projectId: string,
+  userId: string
+): Promise<any[]> {
+  const toolResults: any[] = [];
+
+  // Get default date range for tools that need dates
+  const defaultDates = getDefaultDateRange();
+
+  for (const toolCall of toolCalls) {
+    const tool = allAgentTools!.find((t: any) => t.name === toolCall.name);
+    if (tool) {
+      try {
+        // Inject projectId and userId into args, and provide default dates if not specified
+        const enrichedArgs = {
+          ...toolCall.args,
+          projectId: toolCall.args.projectId || projectId,
+          userId: toolCall.args.userId || userId,
+          startDate: toolCall.args.startDate || defaultDates.startDate,
+          endDate: toolCall.args.endDate || defaultDates.endDate,
+        };
+
+        console.log(`[ChatService] 🔧 Executing tool: ${toolCall.name} with args:`, JSON.stringify(enrichedArgs));
+        const result = await tool.func(enrichedArgs);
+        console.log(`[ChatService] 🔧 Tool result for ${toolCall.name}:`, result.substring(0, 200) + '...');
+
+        toolResults.push(new ToolMessage({
+          content: result,
+          tool_call_id: toolCall.id,
+          name: toolCall.name,
+        }));
+      } catch (error: any) {
+        console.error(`[ChatService] ❌ Tool error for ${toolCall.name}:`, error.message);
+        toolResults.push(new ToolMessage({
+          content: JSON.stringify({ error: error.message }),
+          tool_call_id: toolCall.id,
+          name: toolCall.name,
+        }));
+      }
+    }
+  }
+
+  return toolResults;
+}
+
+/**
+ * Send a message to Avi using Agentic RAG with bindTools (modern LangChain API)
  */
 export async function sendMessage(params: SendMessageParams): Promise<SendMessageResponse> {
-  const { userId, projectId, message, conversationId, dateRange } = params;
+  const { userId, projectId, message, conversationId, pageContext } = params;
+  const requestStartTime = Date.now();
 
   try {
-    console.log(`[ChatService] Processing message for user ${userId}, project ${projectId}`);
+    console.log(`[ChatService] 🤖 Processing agentic message for user ${userId}, project ${projectId}`);
 
-    // Determine date range (use provided or default to last 7 days excluding today)
-    let endDate: string;
-    let startDate: string;
+    // Lazy load LangChain dependencies
+    await loadLangChainDependencies();
 
-    if (dateRange?.endDate && dateRange?.startDate) {
-      endDate = dateRange.endDate;
-      startDate = dateRange.startDate;
-    } else {
-      // Default: last 7 days excluding today
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      endDate = yesterday.toISOString().split('T')[0];
+    // Get project platforms
+    const { connected, notConnected } = await getProjectPlatforms(projectId);
 
-      const sevenDaysAgo = new Date(yesterday);
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
-      startDate = sevenDaysAgo.toISOString().split('T')[0];
+    // Build system prompt
+    const systemPrompt = buildAviSystemPrompt(projectId, userId, connected, notConnected, pageContext);
+
+    // Build chat history
+    const chatHistory = await buildChatHistory(conversationId);
+
+    // Initialize the LLM with tool binding (modern LangChain approach)
+    const llm = new ChatOpenAI({
+      modelName: ENV.OPENAI_MODEL || 'gpt-4o',
+      temperature: 0.7,
+      openAIApiKey: ENV.OPENAI_API_KEY,
+      maxTokens: 2000,
+    });
+
+    // Bind tools to the model
+    const llmWithTools = llm.bindTools(allAgentTools);
+
+    // Build messages array
+    let messages: any[] = [
+      new SystemMessage(systemPrompt),
+      ...chatHistory,
+      new HumanMessage(message),
+    ];
+
+    const toolsUsed: string[] = [];
+    let finalResponse = '';
+    let iterations = 0;
+    const maxIterations = 5;
+
+    // Tool calling loop
+    console.log(`[ChatService] 🚀 Executing agent with ${allAgentTools!.length} tools available`);
+
+    while (iterations < maxIterations) {
+      iterations++;
+
+      // Call the model
+      const response = await llmWithTools.invoke(messages);
+
+      // Check if the model wants to call tools
+      const toolCalls = response.tool_calls || [];
+
+      if (toolCalls.length === 0) {
+        // No more tool calls, we have our final response
+        finalResponse = response.content as string;
+        break;
+      }
+
+      // Log tools being called
+      for (const tc of toolCalls) {
+        toolsUsed.push(tc.name);
+        console.log(`[ChatService] 🔧 Tool call: ${tc.name}`);
+      }
+
+      // Add the assistant's response (with tool calls) to messages
+      messages.push(response);
+
+      // Execute all tool calls with injected projectId and userId
+      const toolResults = await executeToolCalls(toolCalls, projectId, userId);
+
+      // Add tool results to messages
+      messages.push(...toolResults);
     }
 
-    // Build context using RAG (with automatic fallback to traditional approach on error)
-    const { context, metrics, usedRAG } = await buildContextWithRAG(
-      projectId,
-      message,
-      startDate,
-      endDate
-    );
-
-    // Log which approach was used
-    if (usedRAG) {
-      console.log(`[ChatService] 🎯 Using RAG-based context retrieval`);
-    } else {
-      console.log(`[ChatService] 📋 Using traditional full context approach`);
+    if (!finalResponse && iterations >= maxIterations) {
+      finalResponse = "I apologize, but I couldn't complete the request within the allowed iterations. Please try a simpler query.";
     }
 
-    // Build messages array with comprehensive context
-    const messages = await buildMessages(
-      conversationId,
-      message,
-      context,
-      params.pageContext,
-      userId,
-      projectId
-    );
+    console.log(`[ChatService] 🔧 Tools used: ${toolsUsed.join(', ') || 'none'}`);
 
-    // Call OpenAI
-    const aiResponse = await callOpenAI(messages);
+    // Handle user corrections (async, non-blocking)
+    handleUserCorrection(userId, projectId, message).catch(() => { });
 
-    // Save conversation and messages
+    // Save conversation
     const { conversationId: savedConversationId, messageId } = await saveConversation(
       userId,
       projectId,
       conversationId,
       message,
-      aiResponse,
-      metrics
+      finalResponse
     );
+
+    const totalLatency = Date.now() - requestStartTime;
+    console.log(`[ChatService] ✅ Agentic response completed in ${totalLatency}ms`);
 
     return {
       conversationId: savedConversationId,
       messageId,
-      response: aiResponse,
-      metrics,
+      response: finalResponse,
+      toolsUsed: toolsUsed.length > 0 ? toolsUsed : undefined,
     };
   } catch (error: any) {
-    console.error('[ChatService] Error processing message:', error);
-
-    // Handle OpenAI-specific errors
-    const errorMessage = handleOpenAIError(error);
-    throw new Error(errorMessage);
+    console.error('[ChatService] ❌ Error processing agentic message:', error);
+    throw new Error(`Failed to process message: ${error.message}`);
   }
 }
 
@@ -504,7 +564,6 @@ export async function getUserConversations(
  * Delete a conversation
  */
 export async function deleteConversation(conversationId: string, userId: string): Promise<void> {
-  // Verify ownership
   const conversation = await ChatConversation.findOne({
     _id: new mongoose.Types.ObjectId(conversationId),
     userId: new mongoose.Types.ObjectId(userId),
@@ -514,50 +573,15 @@ export async function deleteConversation(conversationId: string, userId: string)
     throw new Error('Conversation not found or unauthorized');
   }
 
-  // Delete all messages in the conversation
   await ChatMessage.deleteMany({
     conversationId: new mongoose.Types.ObjectId(conversationId),
   });
 
-  // Delete context snapshots
   await ChatContext.deleteMany({
     conversationId: new mongoose.Types.ObjectId(conversationId),
   });
 
-  // Delete the conversation
   await ChatConversation.deleteOne({ _id: conversation._id });
-}
-
-/**
- * Manually re-index project metrics to vector database
- */
-export async function reindexProjectMetrics(
-  projectId: string,
-  startDate: string,
-  endDate: string
-): Promise<{ success: boolean; chunksIndexed: number }> {
-  try {
-    console.log(`[ChatService] 🔄 Starting manual re-index for project ${projectId}`);
-
-    // Fetch aggregated metrics
-    const metrics = await metricsAggregator.getProjectMetrics(projectId, startDate, endDate);
-
-    // Re-index (will delete old vectors and create new ones)
-    await ragService.reindexProject(metrics, projectId);
-
-    // Count chunks created
-    const chunks = ragService.chunkMetrics(metrics, projectId);
-
-    console.log(`[ChatService] ✅ Successfully re-indexed project ${projectId} with ${chunks.length} chunks`);
-
-    return {
-      success: true,
-      chunksIndexed: chunks.length,
-    };
-  } catch (error: any) {
-    console.error(`[ChatService] ❌ Error re-indexing project:`, error.message);
-    throw new Error(`Failed to re-index project: ${error.message}`);
-  }
 }
 
 export default {
@@ -565,5 +589,4 @@ export default {
   getConversation,
   getUserConversations,
   deleteConversation,
-  reindexProjectMetrics,
 };

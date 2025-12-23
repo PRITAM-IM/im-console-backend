@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { RevenueOpportunity } from '../models/RevenueOpportunity';
 import Project from '../models/Project';
 import eventDiscoveryService from '../services/eventDiscoveryService';
+import imageGenerationService from '../services/imageGenerationService';
 import mongoose from 'mongoose';
 import { IUser } from '../models/User';
 
@@ -70,6 +71,13 @@ export const discoverOpportunities = async (req: AuthRequest, res: Response) => 
         }
 
         console.log(`🔍 Discovering events for ${hotelName} in ${city}...`);
+
+        // Clear old opportunities for this project before discovering new ones
+        // This ensures we always show fresh data relevant to the current hotel connection
+        const deletedCount = await RevenueOpportunity.deleteMany({
+            projectId: project._id
+        });
+        console.log(`🗑️ Cleared ${deletedCount.deletedCount} old opportunities`);
 
         // Discover events using all available sources
         const events = await eventDiscoveryService.discoverEvents(
@@ -418,6 +426,76 @@ export const deleteOpportunity = async (req: AuthRequest, res: Response) => {
         res.status(500).json({
             success: false,
             message: 'Failed to delete opportunity',
+            error: error.message,
+        });
+    }
+};
+
+/**
+ * Generate marketing campaign image for an opportunity
+ */
+export const generateCampaignImage = async (req: AuthRequest, res: Response) => {
+    try {
+        const { opportunityId } = req.params;
+        const userId = req.user?.id;
+
+        const opportunity = await RevenueOpportunity.findById(opportunityId).populate('projectId');
+
+        if (!opportunity) {
+            return res.status(404).json({
+                success: false,
+                message: 'Opportunity not found',
+            });
+        }
+
+        // Verify ownership
+        const project = opportunity.projectId as any;
+        if (project.userId.toString() !== userId) {
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized',
+            });
+        }
+
+        console.log(`🎨 Generating campaign image for opportunity: ${opportunity.eventName}`);
+
+        // Generate campaign image using Gemini (primary) or DALL-E 3 (fallback)
+        const { imageUrl, prompt, provider } = await imageGenerationService.generateCampaignImage({
+            hotelName: project.googlePlacesData?.displayName || project.name,
+            eventName: opportunity.eventName,
+            eventType: opportunity.eventType,
+            eventDescription: opportunity.description,
+            eventDate: opportunity.startDate.toLocaleDateString('en-IN'),
+            distanceKm: opportunity.distanceFromHotel,
+            expectedAttendance: opportunity.expectedAttendance,
+            city: opportunity.location.city,
+        });
+
+        console.log(`✅ Image generated using: ${provider.toUpperCase()}`);
+
+        // Save image URL to opportunity
+        opportunity.campaignImage = {
+            url: imageUrl,
+            prompt: prompt,
+            provider: provider,
+            generatedAt: new Date(),
+        };
+
+        await opportunity.save();
+
+        res.json({
+            success: true,
+            message: 'Campaign image generated successfully',
+            data: {
+                imageUrl,
+                prompt,
+            },
+        });
+    } catch (error: any) {
+        console.error('Error generating campaign image:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to generate campaign image',
             error: error.message,
         });
     }

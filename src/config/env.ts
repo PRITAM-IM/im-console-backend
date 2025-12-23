@@ -88,7 +88,20 @@ export const ENV = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
   OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4-turbo',
   OPENAI_MAX_TOKENS: process.env.OPENAI_MAX_TOKENS || '2000',
-  // Pinecone Vector Database
+  // Pinecone Vector Database (Legacy - being replaced by Milvus)
   PINECONE_API_KEY: process.env.PINECONE_API_KEY || '',
   PINECONE_INDEX_NAME: process.env.PINECONE_INDEX_NAME || 'hotel-analytics-metrics',
+
+  // Milvus / Zilliz Cloud (New Async RAG Architecture)
+  MILVUS_ADDRESS: process.env.MILVUS_ADDRESS || '', // e.g., 'https://in03-xxxxx.api.gcp-us-west1.zillizcloud.com'
+  MILVUS_TOKEN: process.env.MILVUS_TOKEN || '', // Zilliz Cloud API token
+  MILVUS_SSL: process.env.MILVUS_SSL || 'true', // Use SSL for Zilliz Cloud
+
+  // Background Sync Worker
+  MILVUS_SYNC_ENABLED: process.env.MILVUS_SYNC_ENABLED || 'true',
+  MILVUS_SYNC_CRON: process.env.MILVUS_SYNC_CRON || '0 * * * *', // Every hour by default
+
+  // Event Discovery APIs
+  SERPAPI_API_KEY: process.env.SERPAPI_API_KEY || '',
+  EVENTBRITE_PRIVATE_TOKEN: process.env.EVENTBRITE_PRIVATE_TOKEN || '',
 };

@@ -5,6 +5,7 @@ import {
   getMessages,
   deleteConversation,
   getPresetQuestions,
+  exportConversation,
 } from '../controllers/chatController';
 import { authenticate } from '../middleware/authMiddleware';
 
@@ -20,6 +21,9 @@ router.post('/message', authenticate, sendMessage);
 
 // Get preset questions for a project
 router.get('/preset-questions/:projectId', authenticate, getPresetQuestions);
+
+// Export conversation - MUST come before /conversations/:conversationId routes
+router.get('/export/:conversationId', authenticate, exportConversation);
 
 // Get all conversations for a project
 router.get('/conversations/:projectId', authenticate, getConversations);

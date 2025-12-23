@@ -190,7 +190,7 @@ export const getPresetQuestions = asyncHandler(async (req: Request, res: Respons
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const endDate = yesterday.toISOString().split('T')[0];
-    
+
     const sevenDaysAgo = new Date(yesterday);
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
     const startDate = sevenDaysAgo.toISOString().split('T')[0];
@@ -219,10 +219,93 @@ export const getPresetQuestions = asyncHandler(async (req: Request, res: Respons
   }
 });
 
+/**
+ * @route   GET /api/chat/export/:conversationId
+ * @desc    Export chat conversation as PDF or DOCX
+ * @access  Private
+ */
+export const exportConversation = asyncHandler(async (req: Request, res: Response) => {
+  const { conversationId } = req.params;
+  const { format = 'pdf' } = req.query;
+  const userId = (req as any).user._id;
+
+  if (!conversationId) {
+    res.status(400);
+    throw new Error('Conversation ID is required');
+  }
+
+  if (format !== 'pdf' && format !== 'docx') {
+    res.status(400);
+    throw new Error('Format must be either "pdf" or "docx"');
+  }
+
+  console.log(`[ChatController] Exporting conversation ${conversationId} as ${format}`);
+
+  try {
+    // Get conversation
+    const conversation = await ChatConversation.findOne({
+      _id: conversationId,
+      userId,
+    });
+
+    if (!conversation) {
+      res.status(404);
+      throw new Error('Conversation not found');
+    }
+
+    // Get all messages
+    const messages = await ChatMessage.find({
+      conversationId,
+    }).sort({ createdAt: 1 });
+
+    if (messages.length === 0) {
+      res.status(400);
+      throw new Error('No messages to export');
+    }
+
+    // Get project name
+    const Project = mongoose.model('Project');
+    const project = await Project.findById(conversation.projectId);
+    const projectName = project?.name || 'Unknown Project';
+
+    // Import export utility
+    const { exportChat } = await import('../utils/chatExporter');
+
+    // Export chat
+    const buffer = await exportChat({
+      projectName,
+      conversationId,
+      messages: messages.map((msg) => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        timestamp: msg.timestamp,
+      })),
+      format: format as 'pdf' | 'docx',
+    });
+
+    // Set response headers
+    const filename = `chat-export-${conversationId}-${Date.now()}.${format}`;
+    const contentType = format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', buffer.length);
+
+    res.send(buffer);
+  } catch (error: any) {
+    console.error('[ChatController] Error exporting conversation:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to export conversation',
+    });
+  }
+});
+
 export default {
   sendMessage,
   getConversations,
   getMessages,
   deleteConversation,
   getPresetQuestions,
+  exportConversation,
 };
