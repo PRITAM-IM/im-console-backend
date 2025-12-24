@@ -86,20 +86,7 @@ export async function exportToPDF(options: ExportOptions): Promise<Buffer> {
                 }
             });
 
-            // Footer
-            const pageCount = doc.bufferedPageRange().count;
-            for (let i = 0; i < pageCount; i++) {
-                doc.switchToPage(i);
-                doc.fontSize(8)
-                    .fillColor('#6b7280')
-                    .text(
-                        `Page ${i + 1} of ${pageCount}`,
-                        50,
-                        doc.page.height - 30,
-                        { align: 'center' }
-                    );
-            }
-
+            // End the document (footer will be added automatically on each page)
             doc.end();
         } catch (error) {
             reject(error);
