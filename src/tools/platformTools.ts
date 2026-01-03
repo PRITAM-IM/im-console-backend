@@ -7,6 +7,7 @@ import googleSearchConsoleDataService from '../services/googleSearchConsoleDataS
 import facebookDataService from '../services/facebookDataService';
 import instagramService from '../services/instagramService';
 import googlePlacesService from '../services/googlePlacesService';
+import googleAdsDataService from '../services/googleAdsDataService';
 
 /**
  * Platform Tools for Agentic RAG
@@ -101,45 +102,54 @@ const toolDefinitions = {
                     return JSON.stringify({ error: 'Google Ads not connected for this project' });
                 }
 
-                const { data: campaigns } = await analyticsService.getGoogleAdsCampaigns(
-                    projectId,
-                    project.gaPropertyId || '',
-                    startDate,
-                    endDate
-                );
+                // Get access token
+                const accessToken = await googleAdsDataService.getAccessToken(projectId);
 
-                if (!campaigns || campaigns.length === 0) {
+                // Fetch overview metrics and campaigns data
+                const [overviewData, campaignsData] = await Promise.all([
+                    googleAdsDataService.getOverviewMetrics(
+                        project.googleAdsCustomerId,
+                        accessToken,
+                        { startDate, endDate }
+                    ),
+                    googleAdsDataService.getCampaigns(
+                        project.googleAdsCustomerId,
+                        accessToken,
+                        { startDate, endDate }
+                    )
+                ]);
+
+                if (!campaignsData || campaignsData.length === 0) {
                     return JSON.stringify({
                         platform: 'Google Ads',
                         dateRange: { startDate, endDate },
                         message: 'No campaign data available for this date range',
+                        overview: overviewData || {},
                         campaigns: []
                     });
                 }
 
-                const totalSpend = campaigns.reduce((sum: number, c: any) => sum + (c.cost || 0), 0);
-                const totalClicks = campaigns.reduce((sum: number, c: any) => sum + (c.clicks || 0), 0);
-                const totalImpressions = campaigns.reduce((sum: number, c: any) => sum + (c.impressions || 0), 0);
-                const totalConversions = campaigns.reduce((sum: number, c: any) => sum + (c.conversions || 0), 0);
-
                 return JSON.stringify({
                     platform: 'Google Ads',
                     dateRange: { startDate, endDate },
-                    summary: {
-                        totalSpend,
-                        totalClicks,
-                        totalImpressions,
-                        totalConversions,
-                        avgCPC: totalClicks > 0 ? totalSpend / totalClicks : 0,
-                        avgCTR: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+                    overview: {
+                        totalSpend: overviewData.cost || 0,
+                        totalClicks: overviewData.clicks || 0,
+                        totalImpressions: overviewData.impressions || 0,
+                        totalConversions: overviewData.conversions || 0,
+                        avgCPC: overviewData.averageCpc || 0,
+                        avgCTR: overviewData.ctr || 0,
+                        conversionRate: overviewData.conversionRate || 0,
+                        costPerConversion: overviewData.costPerConversion || 0,
                     },
-                    campaigns: campaigns.map((c: any) => ({
+                    campaigns: campaignsData.map((c: any) => ({
                         name: c.name,
+                        status: c.status,
                         spend: c.cost,
                         clicks: c.clicks,
                         impressions: c.impressions,
                         conversions: c.conversions,
-                        cpc: c.cpc,
+                        cpc: c.averageCpc,
                         ctr: c.ctr,
                     })),
                 }, null, 2);

@@ -151,6 +151,38 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
     throw new Error('Unable to obtain valid access token');
   }
 
+  /**
+   * Calculate the previous period date range based on the current date range
+   */
+  private calculatePreviousPeriod(dateRange: { startDate: string; endDate: string }): { startDate: string; endDate: string } {
+    const start = new Date(dateRange.startDate);
+    const end = new Date(dateRange.endDate);
+    const periodDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // Previous period ends the day before current period starts
+    const prevEnd = new Date(start);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+
+    // Previous period has the same duration
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - periodDays + 1);
+
+    return {
+      startDate: prevStart.toISOString().split('T')[0],
+      endDate: prevEnd.toISOString().split('T')[0]
+    };
+  }
+
+  /**
+   * Calculate percentage change between two values
+   */
+  private calculatePercentageChange(current: number, previous: number): number {
+    if (previous === 0) {
+      return current > 0 ? 100 : 0;
+    }
+    return ((current - previous) / previous) * 100;
+  }
+
   public async getOverviewMetrics(
     customerId: string,
     accessToken: string,
@@ -177,25 +209,32 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
     `;
 
     try {
+      // Fetch current period data
       const results = await executeGaqlQuery(customerId, accessToken, query);
 
-      if (results.length === 0) {
-        return {
-          impressions: 0,
-          clicks: 0,
-          cost: 0,
-          conversions: 0,
-          ctr: 0,
-          averageCpc: 0,
-          costPerConversion: 0,
-          averageCpm: 0,
-          conversionRate: 0,
-          interactions: 0,
-          interactionRate: 0,
-        };
+      // Calculate previous period date range
+      const previousPeriod = this.calculatePreviousPeriod(dateRange);
+      console.log(`[Google Ads Data Service] Previous period: ${previousPeriod.startDate} to ${previousPeriod.endDate}`);
+
+      // Fetch previous period data
+      const previousQuery = `
+        SELECT
+          metrics.impressions,
+          metrics.clicks,
+          metrics.cost_micros,
+          metrics.conversions
+        FROM customer
+        WHERE segments.date BETWEEN '${previousPeriod.startDate}' AND '${previousPeriod.endDate}'
+      `;
+
+      let previousResults: any[] = [];
+      try {
+        previousResults = await executeGaqlQuery(customerId, accessToken, previousQuery);
+      } catch (prevError: any) {
+        console.warn(`[Google Ads Data Service] Could not fetch previous period data: ${prevError.message}`);
       }
 
-      // Aggregate metrics across all results
+      // Aggregate current period metrics
       let totalImpressions = 0;
       let totalClicks = 0;
       let totalCostMicros = 0;
@@ -211,7 +250,32 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
         totalInteractions += Number(metrics.interactions || 0);
       }
 
+      // Aggregate previous period metrics
+      let prevImpressions = 0;
+      let prevClicks = 0;
+      let prevCostMicros = 0;
+      let prevConversions = 0;
+
+      for (const result of previousResults) {
+        const metrics = result.metrics || {};
+        prevImpressions += Number(metrics.impressions || 0);
+        prevClicks += Number(metrics.clicks || 0);
+        prevCostMicros += Number(metrics.costMicros || 0);
+        prevConversions += Number(metrics.conversions || 0);
+      }
+
       const totalCost = microsToValue(totalCostMicros);
+      const prevCost = microsToValue(prevCostMicros);
+
+      // Calculate percentage changes
+      const impressionsChange = this.calculatePercentageChange(totalImpressions, prevImpressions);
+      const clicksChange = this.calculatePercentageChange(totalClicks, prevClicks);
+      const conversionsChange = this.calculatePercentageChange(totalConversions, prevConversions);
+      const costChange = this.calculatePercentageChange(totalCost, prevCost);
+
+      console.log(`[Google Ads Data Service] Current: Impressions=${totalImpressions}, Clicks=${totalClicks}, Conversions=${totalConversions}, Cost=${totalCost}`);
+      console.log(`[Google Ads Data Service] Previous: Impressions=${prevImpressions}, Clicks=${prevClicks}, Conversions=${prevConversions}, Cost=${prevCost}`);
+      console.log(`[Google Ads Data Service] Changes: Impressions=${impressionsChange.toFixed(2)}%, Clicks=${clicksChange.toFixed(2)}%, Conversions=${conversionsChange.toFixed(2)}%, Cost=${costChange.toFixed(2)}%`);
 
       return {
         impressions: totalImpressions,
@@ -225,6 +289,20 @@ class GoogleAdsDataService implements IGoogleAdsDataService {
         conversionRate: totalClicks > 0 ? (totalConversions / totalClicks) * 100 : 0,
         interactions: totalInteractions,
         interactionRate: totalImpressions > 0 ? (totalInteractions / totalImpressions) * 100 : 0,
+        // Change percentages compared to previous period
+        impressionsChange,
+        clicksChange,
+        conversionsChange,
+        costChange,
+        // Previous period data for reference
+        previousPeriod: {
+          startDate: previousPeriod.startDate,
+          endDate: previousPeriod.endDate,
+          impressions: prevImpressions,
+          clicks: prevClicks,
+          conversions: prevConversions,
+          cost: prevCost,
+        }
       };
     } catch (error: any) {
       console.error(`[Google Ads Data Service] Error fetching overview:`, error.message);
