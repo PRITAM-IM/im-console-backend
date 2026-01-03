@@ -10,6 +10,8 @@ import {
   getGoogleAdsDevices,
   getGoogleAdsCampaigns,
   getGoogleAdsKeywords,
+  getDailyMetrics,
+  diagnoseGoogleAds,
 } from '../controllers/googleAdsController';
 import { disconnectGoogleAds } from '../controllers/disconnectController';
 import { authenticate } from '../middleware/authMiddleware';
@@ -26,6 +28,8 @@ router.get('/:projectId/locations', authenticate, getGoogleAdsLocations);
 router.get('/:projectId/devices', authenticate, getGoogleAdsDevices);
 router.get('/:projectId/campaigns', authenticate, getGoogleAdsCampaigns);
 router.get('/:projectId/keywords', authenticate, getGoogleAdsKeywords);
+router.get('/:projectId/daily-metrics', authenticate, getDailyMetrics);
+router.get('/:projectId/diagnose', authenticate, diagnoseGoogleAds);
 router.post('/disconnect', authenticate, disconnectGoogleAds);
 
 export default router;

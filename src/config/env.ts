@@ -57,6 +57,8 @@ export const ENV = {
   GOOGLE_AUTH_REDIRECT_URL: process.env.GOOGLE_AUTH_REDIRECT_URL || 'http://localhost:3000/api/auth/google/callback',
   GOOGLE_USER_REDIRECT_URL: process.env.GOOGLE_USER_REDIRECT_URL || 'http://localhost:5173/auth/google/callback',
   GOOGLE_ADS_DEVELOPER_TOKEN: process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '',
+  // Manager Account ID (MCC) - required if querying client accounts through a manager
+  GOOGLE_ADS_LOGIN_CUSTOMER_ID: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '',
   GOOGLE_ADS_REDIRECT_URL: process.env.GOOGLE_ADS_REDIRECT_URL || 'http://localhost:3000/api/google-ads/callback',
   GOOGLE_SEARCH_CONSOLE_REDIRECT_URL: process.env.GOOGLE_SEARCH_CONSOLE_REDIRECT_URL || 'http://localhost:3000/api/gsc/callback',
   FACEBOOK_APP_ID: process.env.FACEBOOK_APP_ID || '',
