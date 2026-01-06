@@ -13,7 +13,7 @@ const router = express.Router();
 router.get('/projects/:projectId/forms', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id;
 
         const forms = await FormTemplate.find({ projectId, userId })
             .sort({ createdAt: -1 })
@@ -30,7 +30,7 @@ router.get('/projects/:projectId/forms', authMiddleware, async (req: Request, re
 router.get('/projects/:projectId/forms/:formId', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId, formId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id;
 
         const form = await FormTemplate.findOne({
             _id: formId,
@@ -54,8 +54,12 @@ router.get('/projects/:projectId/forms/:formId', authMiddleware, async (req: Req
 router.post('/projects/:projectId/forms', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id; // Changed from userId to _id
         const formData = req.body;
+
+        if (!userId) {
+            return res.status(401).json({ error: 'User not authenticated' });
+        }
 
         const newForm = new FormTemplate({
             ...formData,
@@ -76,7 +80,7 @@ router.post('/projects/:projectId/forms', authMiddleware, async (req: Request, r
 router.put('/projects/:projectId/forms/:formId', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId, formId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id;
         const updates = req.body;
 
         const form = await FormTemplate.findOneAndUpdate(
@@ -100,7 +104,7 @@ router.put('/projects/:projectId/forms/:formId', authMiddleware, async (req: Req
 router.delete('/projects/:projectId/forms/:formId', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId, formId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id;
 
         const form = await FormTemplate.findOneAndDelete({
             _id: formId,
@@ -126,7 +130,7 @@ router.delete('/projects/:projectId/forms/:formId', authMiddleware, async (req: 
 router.patch('/projects/:projectId/forms/:formId/publish', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId, formId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id;
         const { isPublished } = req.body;
 
         const form = await FormTemplate.findOneAndUpdate(
@@ -150,7 +154,7 @@ router.patch('/projects/:projectId/forms/:formId/publish', authMiddleware, async
 router.post('/projects/:projectId/forms/:formId/duplicate', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId, formId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id;
 
         const originalForm = await FormTemplate.findOne({
             _id: formId,
@@ -221,7 +225,7 @@ router.get('/forms/:slug', async (req: Request, res: Response) => {
 router.get('/projects/:projectId/forms/:formId/submissions', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId, formId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id;
 
         const { status, limit = 50, skip = 0 } = req.query;
 
@@ -255,7 +259,7 @@ router.get('/projects/:projectId/forms/:formId/submissions', authMiddleware, asy
 router.get('/projects/:projectId/forms/:formId/submissions/:submissionId', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId, formId, submissionId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id;
 
         // Verify user owns this form
         const form = await FormTemplate.findOne({ _id: formId, projectId, userId });
@@ -326,7 +330,7 @@ router.post('/forms/:slug/submit', async (req: Request, res: Response) => {
 router.delete('/projects/:projectId/forms/:formId/submissions/:submissionId', authMiddleware, async (req: Request, res: Response) => {
     try {
         const { projectId, formId, submissionId } = req.params;
-        const userId = (req as any).user?.userId;
+        const userId = (req as any).user?._id;
 
         // Verify user owns this form
         const form = await FormTemplate.findOne({ _id: formId, projectId, userId });
