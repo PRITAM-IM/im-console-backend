@@ -44,8 +44,11 @@ class LinkedInDataService implements ILinkedInDataService {
       throw new Error('LinkedIn connection not found for this project');
     }
 
-    // Check if access token is still valid
-    if (connection.accessToken && connection.expiresAt && connection.expiresAt > new Date()) {
+    // Refresh proactively 5 minutes before expiry to avoid edge-of-expiry failures.
+    const now = Date.now();
+    const expiryBufferMs = 5 * 60 * 1000;
+    const expiresAtMs = connection.expiresAt ? new Date(connection.expiresAt).getTime() : 0;
+    if (connection.accessToken && expiresAtMs - now > expiryBufferMs) {
       return connection.accessToken;
     }
 
@@ -60,14 +63,13 @@ class LinkedInDataService implements ILinkedInDataService {
         await connection.save();
 
         return accessToken;
-      } catch (error) {
+      } catch (error: any) {
         console.error('[LinkedIn Data Service] Failed to refresh token:', error);
-        // If refresh fails, try using existing token
-        return connection.accessToken;
+        throw new Error(`Failed to refresh LinkedIn access token: ${error.message || 'Unknown error'}`);
       }
     }
 
-    return connection.accessToken;
+    throw new Error('Unable to obtain valid access token');
   }
 
   public async getOverviewMetrics(pageId: string, accessToken: string): Promise<LinkedInOverviewMetrics> {
@@ -77,9 +79,9 @@ class LinkedInDataService implements ILinkedInDataService {
       // LinkedIn API v2 - Get basic profile stats
       // Note: Full organization statistics require r_organization_social permission
       // For personal profiles, we return basic info
-      
+
       const profile = await linkedinAuthService.getLinkedInProfile(accessToken);
-      
+
       // Return basic metrics
       // In a full implementation with organization access, you would fetch:
       // - organizationalEntityFollowerStatistics
@@ -105,7 +107,7 @@ class LinkedInDataService implements ILinkedInDataService {
       // LinkedIn API requires specific permissions for post data
       // r_organization_social for organization posts
       // For now, return empty array as this requires additional API access
-      
+
       return [];
     } catch (error: any) {
       console.error('[LinkedIn Data Service] Error fetching posts:', error);
@@ -119,7 +121,7 @@ class LinkedInDataService implements ILinkedInDataService {
 
       // LinkedIn follower demographics require organization admin access
       // organizationalEntityFollowerStatistics endpoint
-      
+
       return [];
     } catch (error: any) {
       console.error('[LinkedIn Data Service] Error fetching demographics:', error);

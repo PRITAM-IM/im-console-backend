@@ -9,21 +9,21 @@ export const getAuthUrl = asyncHandler(async (req: Request, res: Response): Prom
   try {
     const { projectId } = req.query;
     const state = projectId ? String(projectId) : undefined;
-    
+
     console.log(`[Meta Ads Get Auth URL] ===== BACKEND OAuth URL Generation =====`);
     console.log(`[Meta Ads Get Auth URL] Request received from: ${req.headers.origin || 'unknown'}`);
     console.log(`[Meta Ads Get Auth URL] Project ID: ${projectId}`);
     console.log(`[Meta Ads Get Auth URL] State: ${state}`);
-    
+
     // Check environment variables directly
     const appIdFromEnv = process.env.FACEBOOK_APP_ID;
     const redirectUriFromEnv = process.env.META_ADS_REDIRECT_URI;
-    
+
     console.log(`[Meta Ads Get Auth URL] FACEBOOK_APP_ID from env: ${appIdFromEnv ? `${appIdFromEnv.substring(0, 4)}...` : 'NOT SET'}`);
     console.log(`[Meta Ads Get Auth URL] META_ADS_REDIRECT_URI from env: ${redirectUriFromEnv || 'NOT SET'}`);
-    
+
     const authUrl = metaAdsAuthService.generateAuthUrl(state);
-    
+
     // Extract client_id from generated URL to verify
     const clientIdMatch = authUrl.match(/client_id=([^&]+)/);
     if (clientIdMatch) {
@@ -33,10 +33,10 @@ export const getAuthUrl = asyncHandler(async (req: Request, res: Response): Prom
     } else {
       console.error(`[Meta Ads Get Auth URL] ✗ ERROR: client_id not found in generated URL!`);
     }
-    
+
     console.log(`[Meta Ads Get Auth URL] Full auth URL (first 200 chars): ${authUrl.substring(0, 200)}...`);
     console.log(`[Meta Ads Get Auth URL] ==========================================`);
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -58,7 +58,7 @@ export const handleCallback = asyncHandler(async (req: Request, res: Response): 
   console.log(`[Meta Ads OAuth Callback] Callback route hit!`);
   console.log(`[Meta Ads OAuth Callback] Query params:`, req.query);
   console.log(`[Meta Ads OAuth Callback] Full URL:`, req.url);
-  
+
   const { code, state, error } = req.query;
 
   if (error) {
@@ -75,7 +75,7 @@ export const handleCallback = asyncHandler(async (req: Request, res: Response): 
 
   try {
     console.log(`[Meta Ads OAuth Callback] Processing callback for project: ${projectId}`);
-    
+
     // Handle OAuth callback
     const { accessToken, refreshToken, expiresAt } = await metaAdsAuthService.handleCallback(String(code));
     console.log(`[Meta Ads OAuth Callback] Tokens received - Access token: ${accessToken ? 'Yes' : 'No'}, Refresh token: ${refreshToken ? 'Yes' : 'No'}`);
@@ -117,7 +117,7 @@ export const getAdAccounts = asyncHandler(async (req: Request, res: Response): P
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     // Verify project belongs to user
     const project = await projectService.getProjectById(projectId, userId);
     if (!project) {
@@ -161,7 +161,7 @@ export const saveAdAccount = asyncHandler(async (req: Request, res: Response): P
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     // Verify project belongs to user
     const project = await projectService.getProjectById(projectId, userId);
     if (!project) {
@@ -187,7 +187,7 @@ export const saveAdAccount = asyncHandler(async (req: Request, res: Response): P
 
     // Ensure metaAdsAccountId is included in response
     const projectData = updatedProject.toObject ? updatedProject.toObject() : updatedProject;
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -227,7 +227,7 @@ export const getInsights = asyncHandler(async (req: Request, res: Response): Pro
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     // Verify project belongs to user
     const project = await projectService.getProjectById(projectId, userId);
     if (!project) {
@@ -287,7 +287,7 @@ export const getCampaigns = asyncHandler(async (req: Request, res: Response): Pr
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project || !project.metaAdsAccountId) {
       res.status(404).json({
@@ -326,7 +326,7 @@ export const getAgeGenderBreakdown = asyncHandler(async (req: Request, res: Resp
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project || !project.metaAdsAccountId) {
       res.status(404).json({
@@ -365,7 +365,7 @@ export const getPlatformBreakdown = asyncHandler(async (req: Request, res: Respo
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project || !project.metaAdsAccountId) {
       res.status(404).json({
@@ -404,7 +404,7 @@ export const getDailyBreakdown = asyncHandler(async (req: Request, res: Response
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project || !project.metaAdsAccountId) {
       res.status(404).json({
@@ -422,6 +422,43 @@ export const getDailyBreakdown = asyncHandler(async (req: Request, res: Response
     );
 
     res.status(200).json({ success: true, data: dailyData });
+  } catch (error: any) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// Route 10: Get account balance (available funds)
+export const getAccountBalance = asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { projectId } = req.params;
+
+  if (!projectId) {
+    res.status(400).json({
+      success: false,
+      error: 'Project ID is required',
+    });
+    return;
+  }
+
+  try {
+    // @ts-ignore
+    const userId = req.user._id.toString();
+
+    const project = await projectService.getProjectById(projectId, userId);
+    if (!project || !project.metaAdsAccountId) {
+      res.status(404).json({
+        success: false,
+        error: 'Project or Meta Ads account not found',
+      });
+      return;
+    }
+
+    const accessToken = await metaAdsDataService.getAccessToken(projectId);
+    const balanceData = await metaAdsDataService.getAccountBalance(
+      project.metaAdsAccountId,
+      accessToken
+    );
+
+    res.status(200).json({ success: true, data: balanceData });
   } catch (error: any) {
     res.status(400).json({ success: false, error: error.message });
   }

@@ -60,9 +60,7 @@ export const handleCallbackGet = asyncHandler(async (req: Request, res: Response
     console.log(`[YouTube OAuth Callback] Tokens received - Access token: ${accessToken ? 'Yes' : 'No'}, Refresh token: ${refreshToken ? 'Yes' : 'No'}`);
 
     if (!refreshToken) {
-      console.error('[YouTube OAuth Callback] ERROR: No refresh token received');
-      res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:5173'}/auth/youtube/callback?error=${encodeURIComponent('Failed to obtain refresh token. Please try again.')}`);
-      return;
+      console.warn('[YouTube OAuth Callback] No refresh token returned in callback; existing token will be reused if available.');
     }
 
     // Save connection
@@ -120,11 +118,7 @@ export const handleCallback = asyncHandler(async (req: Request, res: Response): 
     const { accessToken, refreshToken, expiresAt } = await youtubeAuthService.handleCallback(code);
 
     if (!refreshToken) {
-      res.status(400).json({
-        success: false,
-        error: 'Failed to obtain refresh token. Please try again.',
-      });
-      return;
+      console.warn('[YouTube Callback POST] No refresh token returned in callback; existing token will be reused if available.');
     }
 
     // Save connection to database
@@ -654,4 +648,3 @@ export const getTopContent = asyncHandler(async (req: Request, res: Response): P
     });
   }
 });
-

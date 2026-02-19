@@ -83,8 +83,11 @@ class GaDataService implements IGaDataService {
       throw new Error('GA connection not found for this project');
     }
 
-    // Check if access token is still valid
-    if (connection.accessToken && connection.expiresAt && new Date() < connection.expiresAt) {
+    // Refresh proactively 5 minutes before expiry to avoid edge-of-expiry failures.
+    const now = Date.now();
+    const expiryBufferMs = 5 * 60 * 1000;
+    const expiresAtMs = connection.expiresAt ? new Date(connection.expiresAt).getTime() : 0;
+    if (connection.accessToken && expiresAtMs - now > expiryBufferMs) {
       return connection.accessToken;
     }
 

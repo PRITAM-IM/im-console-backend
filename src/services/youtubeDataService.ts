@@ -88,8 +88,11 @@ class YouTubeDataService implements IYouTubeDataService {
       throw new Error('YouTube connection not found for this project');
     }
 
-    // Check if access token is still valid
-    if (connection.accessToken && connection.expiresAt && connection.expiresAt > new Date()) {
+    // Refresh proactively 5 minutes before expiry to avoid UI reconnect churn.
+    const now = Date.now();
+    const expiryBufferMs = 5 * 60 * 1000;
+    const expiresAtMs = connection.expiresAt ? new Date(connection.expiresAt).getTime() : 0;
+    if (connection.accessToken && expiresAtMs - now > expiryBufferMs) {
       return connection.accessToken;
     }
 

@@ -22,6 +22,7 @@ import linkedinRoutes from './routes/linkedinRoutes';
 import aiAnalysisRoutes from './routes/aiAnalysisRoutes';
 import formRoutes from './routes/formRoutes';
 import chatRoutes from './routes/chatRoutes';
+import balanceAlertRoutes from './routes/balanceAlertRoutes';
 
 // Import middleware
 import { errorHandler } from './middleware/errorMiddleware';
@@ -78,6 +79,7 @@ app.use('/api/linkedin', linkedinRoutes);
 app.use('/api/ai', aiAnalysisRoutes);
 app.use('/api', formRoutes); // Form routes (includes both /projects/:projectId/forms and /forms/:slug)
 app.use('/api/chat', chatRoutes); // Chat routes for Avi AI
+app.use('/api/balance-alerts', balanceAlertRoutes); // Balance alert testing endpoints
 app.use('/api/revenue-opportunities', require('./routes/revenueOpportunityRoutes').default); // Revenue opportunities
 
 // Health check endpoint

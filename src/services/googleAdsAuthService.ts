@@ -78,18 +78,27 @@ class GoogleAdsAuthService implements IGoogleAdsAuthService {
       }
 
       const projectObjectId = new Types.ObjectId(projectId);
+      const existingConnection = await GoogleAdsConnection.findOne({ projectId: projectObjectId });
+      const effectiveRefreshToken = refreshToken || existingConnection?.refreshToken;
 
-      // Remove existing connection if it exists
-      const deleteResult = await GoogleAdsConnection.deleteMany({ projectId: projectObjectId });
-      console.log(`[Google Ads Auth Service] Deleted ${deleteResult.deletedCount} existing connection(s)`);
+      if (!effectiveRefreshToken) {
+        throw new Error('Refresh token is missing. Please reconnect Google Ads with consent.');
+      }
 
-      // Create new connection
-      const connection = await GoogleAdsConnection.create({
-        projectId: projectObjectId,
-        refreshToken,
-        accessToken,
-        expiresAt,
-      });
+      let connection: IGoogleAdsConnection;
+      if (existingConnection) {
+        existingConnection.refreshToken = effectiveRefreshToken;
+        existingConnection.accessToken = accessToken;
+        existingConnection.expiresAt = expiresAt ?? undefined;
+        connection = await existingConnection.save();
+      } else {
+        connection = await GoogleAdsConnection.create({
+          projectId: projectObjectId,
+          refreshToken: effectiveRefreshToken,
+          accessToken,
+          expiresAt,
+        });
+      }
 
       console.log(`[Google Ads Auth Service] Connection created successfully - ID: ${connection._id}`);
 
@@ -316,4 +325,3 @@ class GoogleAdsAuthService implements IGoogleAdsAuthService {
 }
 
 export default new GoogleAdsAuthService();
-

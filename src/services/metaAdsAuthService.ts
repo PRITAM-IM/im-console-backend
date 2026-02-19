@@ -128,18 +128,27 @@ class MetaAdsAuthService implements IMetaAdsAuthService {
       }
 
       const projectObjectId = new Types.ObjectId(projectId);
-      
-      // Remove existing connection if it exists
-      const deleteResult = await MetaAdsConnection.deleteMany({ projectId: projectObjectId });
-      console.log(`[Meta Ads Auth Service] Deleted ${deleteResult.deletedCount} existing connection(s)`);
+      const existingConnection = await MetaAdsConnection.findOne({ projectId: projectObjectId });
+      const effectiveRefreshToken = refreshToken || existingConnection?.refreshToken;
 
-      // Create new connection
-      const connection = await MetaAdsConnection.create({
-        projectId: projectObjectId,
-        refreshToken,
-        accessToken,
-        expiresAt,
-      });
+      if (!effectiveRefreshToken) {
+        throw new Error('Refresh token is missing. Please reconnect Meta Ads.');
+      }
+
+      let connection: IMetaAdsConnection;
+      if (existingConnection) {
+        existingConnection.refreshToken = effectiveRefreshToken;
+        existingConnection.accessToken = accessToken;
+        existingConnection.expiresAt = expiresAt ?? undefined;
+        connection = await existingConnection.save();
+      } else {
+        connection = await MetaAdsConnection.create({
+          projectId: projectObjectId,
+          refreshToken: effectiveRefreshToken,
+          accessToken,
+          expiresAt,
+        });
+      }
 
       console.log(`[Meta Ads Auth Service] Connection created successfully - ID: ${connection._id}`);
       
@@ -289,4 +298,3 @@ class MetaAdsAuthService implements IMetaAdsAuthService {
 }
 
 export default new MetaAdsAuthService();
-

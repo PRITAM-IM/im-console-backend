@@ -67,16 +67,27 @@ class GoogleDriveAuthService implements IGoogleDriveAuthService {
       }
 
       const projectObjectId = new Types.ObjectId(projectId);
-      
-      const deleteResult = await GoogleDriveConnection.deleteMany({ projectId: projectObjectId });
-      console.log(`[Google Drive Auth Service] Deleted ${deleteResult.deletedCount} existing connection(s)`);
+      const existingConnection = await GoogleDriveConnection.findOne({ projectId: projectObjectId });
+      const effectiveRefreshToken = refreshToken || existingConnection?.refreshToken;
 
-      const connection = await GoogleDriveConnection.create({
-        projectId: projectObjectId,
-        refreshToken,
-        accessToken,
-        expiresAt,
-      });
+      if (!effectiveRefreshToken) {
+        throw new Error('Refresh token is missing. Please reconnect Google Drive with consent.');
+      }
+
+      let connection: IGoogleDriveConnection;
+      if (existingConnection) {
+        existingConnection.refreshToken = effectiveRefreshToken;
+        existingConnection.accessToken = accessToken;
+        existingConnection.expiresAt = expiresAt ?? undefined;
+        connection = await existingConnection.save();
+      } else {
+        connection = await GoogleDriveConnection.create({
+          projectId: projectObjectId,
+          refreshToken: effectiveRefreshToken,
+          accessToken,
+          expiresAt,
+        });
+      }
 
       console.log(`[Google Drive Auth Service] Connection created successfully - ID: ${connection._id}`);
       

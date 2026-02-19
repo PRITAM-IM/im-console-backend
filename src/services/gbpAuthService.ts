@@ -84,18 +84,27 @@ class GbpAuthService implements IGbpAuthService {
       }
 
       const projectObjectId = new Types.ObjectId(projectId);
-      
-      // Remove existing connection if it exists
-      const deleteResult = await GoogleBusinessProfileConnection.deleteMany({ projectId: projectObjectId });
-      console.log(`[GBP Auth Service] Deleted ${deleteResult.deletedCount} existing connection(s)`);
+      const existingConnection = await GoogleBusinessProfileConnection.findOne({ projectId: projectObjectId });
+      const effectiveRefreshToken = refreshToken || existingConnection?.refreshToken;
 
-      // Create new connection
-      const connection = await GoogleBusinessProfileConnection.create({
-        projectId: projectObjectId,
-        refreshToken,
-        accessToken,
-        expiresAt,
-      });
+      if (!effectiveRefreshToken) {
+        throw new Error('Refresh token is missing. Please reconnect Google Business Profile with consent.');
+      }
+
+      let connection: IGoogleBusinessProfileConnection;
+      if (existingConnection) {
+        existingConnection.refreshToken = effectiveRefreshToken;
+        existingConnection.accessToken = accessToken;
+        existingConnection.expiresAt = expiresAt ?? undefined;
+        connection = await existingConnection.save();
+      } else {
+        connection = await GoogleBusinessProfileConnection.create({
+          projectId: projectObjectId,
+          refreshToken: effectiveRefreshToken,
+          accessToken,
+          expiresAt,
+        });
+      }
 
       console.log(`[GBP Auth Service] Connection created successfully - ID: ${connection._id}`);
       
@@ -206,4 +215,3 @@ class GbpAuthService implements IGbpAuthService {
 }
 
 export default new GbpAuthService();
-

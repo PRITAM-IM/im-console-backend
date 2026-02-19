@@ -57,16 +57,27 @@ class GoogleSheetsAuthService implements IGoogleSheetsAuthService {
       }
 
       const projectObjectId = new Types.ObjectId(projectId);
-      
-      const deleteResult = await GoogleSheetsConnection.deleteMany({ projectId: projectObjectId });
-      console.log(`[Google Sheets Auth Service] Deleted ${deleteResult.deletedCount} existing connection(s)`);
+      const existingConnection = await GoogleSheetsConnection.findOne({ projectId: projectObjectId });
+      const effectiveRefreshToken = refreshToken || existingConnection?.refreshToken;
 
-      const connection = await GoogleSheetsConnection.create({
-        projectId: projectObjectId,
-        refreshToken,
-        accessToken,
-        expiresAt,
-      });
+      if (!effectiveRefreshToken) {
+        throw new Error('Refresh token is missing. Please reconnect Google Sheets with consent.');
+      }
+
+      let connection: IGoogleSheetsConnection;
+      if (existingConnection) {
+        existingConnection.refreshToken = effectiveRefreshToken;
+        existingConnection.accessToken = accessToken;
+        existingConnection.expiresAt = expiresAt ?? undefined;
+        connection = await existingConnection.save();
+      } else {
+        connection = await GoogleSheetsConnection.create({
+          projectId: projectObjectId,
+          refreshToken: effectiveRefreshToken,
+          accessToken,
+          expiresAt,
+        });
+      }
 
       console.log(`[Google Sheets Auth Service] Connection created successfully - ID: ${connection._id}`);
       

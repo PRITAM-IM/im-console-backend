@@ -46,25 +46,32 @@ class GbpDataService implements IGbpDataService {
    */
   public async getAccessToken(projectId: string): Promise<string> {
     const connection = await gbpAuthService.getConnectionByProject(projectId);
-    
+
     if (!connection) {
       throw new Error('Google Business Profile not connected for this project');
     }
 
-    // Check if access token is still valid
-    if (connection.accessToken && connection.expiresAt && connection.expiresAt > new Date()) {
+    // Refresh proactively 5 minutes before expiry to avoid edge-of-expiry failures.
+    const now = Date.now();
+    const expiryBufferMs = 5 * 60 * 1000;
+    const expiresAtMs = connection.expiresAt ? new Date(connection.expiresAt).getTime() : 0;
+    if (connection.accessToken && expiresAtMs - now > expiryBufferMs) {
       return connection.accessToken;
     }
 
     // Refresh access token
-    const { accessToken, expiresAt } = await gbpAuthService.refreshAccessToken(connection.refreshToken);
-    
-    // Update connection with new access token
-    connection.accessToken = accessToken;
-    connection.expiresAt = expiresAt || undefined;
-    await connection.save();
+    if (connection.refreshToken) {
+      const { accessToken, expiresAt } = await gbpAuthService.refreshAccessToken(connection.refreshToken);
 
-    return accessToken;
+      // Update connection with new access token
+      connection.accessToken = accessToken;
+      connection.expiresAt = expiresAt || undefined;
+      await connection.save();
+
+      return accessToken;
+    }
+
+    throw new Error('Unable to obtain valid access token');
   }
 
   /**

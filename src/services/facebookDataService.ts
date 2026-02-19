@@ -81,14 +81,19 @@ class FacebookDataService implements IFacebookDataService {
       throw new Error('Facebook connection not found for this project');
     }
 
-    const now = new Date();
-    const expiresAt = connection.expiresAt || new Date(0);
-    const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+    // Refresh proactively 5 minutes before expiry to avoid edge-of-expiry failures.
+    const now = Date.now();
+    const expiryBufferMs = 5 * 60 * 1000;
+    const expiresAtMs = connection.expiresAt ? new Date(connection.expiresAt).getTime() : 0;
+    if (connection.accessToken && expiresAtMs - now > expiryBufferMs) {
+      return connection.accessToken;
+    }
 
-    if (!connection.accessToken || expiresAt < fiveMinutesFromNow) {
+    // Refresh access token
+    if (connection.refreshToken) {
       console.log('[Facebook Data Service] Access token expired or missing, refreshing...');
       const { accessToken, expiresAt: newExpiresAt } = await facebookAuthService.refreshAccessToken(connection.refreshToken);
-      
+
       connection.accessToken = accessToken;
       connection.expiresAt = newExpiresAt ?? undefined;
       await connection.save();
@@ -96,7 +101,7 @@ class FacebookDataService implements IFacebookDataService {
       return accessToken;
     }
 
-    return connection.accessToken;
+    throw new Error('Unable to obtain valid access token');
   }
 
   /**
@@ -128,10 +133,10 @@ class FacebookDataService implements IFacebookDataService {
   ): Promise<FacebookOverviewMetrics> {
     console.log(`[Facebook Data Service] Fetching overview metrics for page: ${pageId}`);
     console.log(`[Facebook Data Service] Date range: ${dateRange.startDate} to ${dateRange.endDate}`);
-    
+
     const since = dateToUnix(dateRange.startDate);
     const until = dateToUnix(dateRange.endDate) + 86400;
-    
+
     const result: FacebookOverviewMetrics = {
       pageViews: 0,
       reach: 0,
@@ -156,7 +161,7 @@ class FacebookDataService implements IFacebookDataService {
       // Fetch basic page info
       const pageUrl = `${FACEBOOK_API_BASE_URL}/${pageId}?fields=followers_count,fan_count,name&access_token=${accessToken}`;
       console.log(`[Facebook Data Service] Fetching page info from: ${pageUrl.substring(0, 80)}...`);
-      
+
       const pageResponse = await fetch(pageUrl);
       if (pageResponse.ok) {
         const pageData = await pageResponse.json() as any;
@@ -172,7 +177,7 @@ class FacebookDataService implements IFacebookDataService {
       // Facebook Page Insights has specific requirements:
       // - Some metrics only work with specific periods (day, week, days_28)
       // - Some metrics need "total_over_range" period
-      
+
       // Method 1: Try fetching insights with period=total_over_range (aggregated)
       const aggregatedMetrics = [
         'page_impressions',
@@ -182,9 +187,9 @@ class FacebookDataService implements IFacebookDataService {
         'page_post_engagements',
         'page_engaged_users',
       ].join(',');
-      
+
       const aggregatedUrl = `${FACEBOOK_API_BASE_URL}/${pageId}/insights?metric=${aggregatedMetrics}&period=total_over_range&since=${since}&until=${until}&access_token=${accessToken}`;
-      
+
       console.log(`[Facebook Data Service] Fetching aggregated insights...`);
       try {
         const aggResponse = await fetch(aggregatedUrl);
@@ -216,7 +221,7 @@ class FacebookDataService implements IFacebookDataService {
         } else {
           const errorText = await aggResponse.text();
           console.log(`[Facebook Data Service] Aggregated metrics not available, trying day period...`);
-          
+
           // Fallback: Try with day period and sum values
           const dayUrl = `${FACEBOOK_API_BASE_URL}/${pageId}/insights?metric=${aggregatedMetrics}&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
           const dayResponse = await fetch(dayUrl);
@@ -257,7 +262,7 @@ class FacebookDataService implements IFacebookDataService {
       // Method 2: Fetch fan changes with day period (these only work with day/week/days_28)
       const fanMetrics = 'page_fan_adds,page_fan_removes';
       const fanUrl = `${FACEBOOK_API_BASE_URL}/${pageId}/insights?metric=${fanMetrics}&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
-      
+
       console.log(`[Facebook Data Service] Fetching fan metrics...`);
       try {
         const fanResponse = await fetch(fanUrl);
@@ -284,7 +289,7 @@ class FacebookDataService implements IFacebookDataService {
 
       // Method 3: Fetch page views (works with day period)
       const viewUrl = `${FACEBOOK_API_BASE_URL}/${pageId}/insights?metric=page_views_total&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
-      
+
       console.log(`[Facebook Data Service] Fetching view metrics...`);
       try {
         const viewResponse = await fetch(viewUrl);
@@ -385,10 +390,10 @@ class FacebookDataService implements IFacebookDataService {
     dateRange: { startDate: string; endDate: string }
   ): Promise<FacebookTimeSeriesData[]> {
     console.log(`[Facebook Data Service] Fetching time series data`);
-    
+
     const since = dateToUnix(dateRange.startDate);
     const until = dateToUnix(dateRange.endDate) + 86400;
-    
+
     const result: FacebookTimeSeriesData[] = [];
     const dateMap: Record<string, FacebookTimeSeriesData> = {};
 
@@ -402,17 +407,17 @@ class FacebookDataService implements IFacebookDataService {
       ].join(',');
 
       const url = `${FACEBOOK_API_BASE_URL}/${pageId}/insights?metric=${metrics}&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
-      
+
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json() as { data?: any[] };
-        
+
         if (data.data) {
           for (const metric of data.data) {
             for (const value of metric.values || []) {
               const date = value.end_time?.split('T')[0] || '';
               if (!date) continue;
-              
+
               if (!dateMap[date]) {
                 dateMap[date] = {
                   date,
@@ -423,7 +428,7 @@ class FacebookDataService implements IFacebookDataService {
                   pageViews: 0,
                 };
               }
-              
+
               switch (metric.name) {
                 case 'page_post_engagements':
                   dateMap[date].engagement = Number(value.value) || 0;
@@ -460,30 +465,30 @@ class FacebookDataService implements IFacebookDataService {
     dateRange: { startDate: string; endDate: string }
   ): Promise<FacebookFollowData[]> {
     console.log(`[Facebook Data Service] Fetching follow/unfollow data`);
-    
+
     const since = dateToUnix(dateRange.startDate);
     const until = dateToUnix(dateRange.endDate) + 86400;
-    
+
     const dateMap: Record<string, FacebookFollowData> = {};
 
     try {
       const metrics = ['page_fan_adds', 'page_fan_removes'].join(',');
       const url = `${FACEBOOK_API_BASE_URL}/${pageId}/insights?metric=${metrics}&period=day&since=${since}&until=${until}&access_token=${accessToken}`;
-      
+
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json() as { data?: any[] };
-        
+
         if (data.data) {
           for (const metric of data.data) {
             for (const value of metric.values || []) {
               const date = value.end_time?.split('T')[0] || '';
               if (!date) continue;
-              
+
               if (!dateMap[date]) {
                 dateMap[date] = { date, followers: 0, unfollowers: 0 };
               }
-              
+
               if (metric.name === 'page_fan_adds') {
                 dateMap[date].followers = Number(value.value) || 0;
               } else if (metric.name === 'page_fan_removes') {
@@ -507,10 +512,10 @@ class FacebookDataService implements IFacebookDataService {
     dateRange: { startDate: string; endDate: string }
   ): Promise<FacebookPost[]> {
     console.log(`[Facebook Data Service] Fetching posts`);
-    
+
     const since = dateToUnix(dateRange.startDate);
     const until = dateToUnix(dateRange.endDate) + 86400;
-    
+
     const posts: FacebookPost[] = [];
 
     try {
@@ -530,11 +535,11 @@ class FacebookDataService implements IFacebookDataService {
       ].join(',');
 
       const url = `${FACEBOOK_API_BASE_URL}/${pageId}/posts?fields=${fields}&since=${since}&until=${until}&limit=50&access_token=${accessToken}`;
-      
+
       const response = await fetch(url);
       if (response.ok) {
         const data = await response.json() as { data?: any[] };
-        
+
         if (data.data) {
           for (const post of data.data) {
             const postData: FacebookPost = {
@@ -553,7 +558,7 @@ class FacebookDataService implements IFacebookDataService {
             try {
               const postInsightsUrl = `${FACEBOOK_API_BASE_URL}/${post.id}/insights?metric=post_impressions,post_impressions_unique,post_engaged_users,post_clicks&access_token=${accessToken}`;
               const insightsResponse = await fetch(postInsightsUrl);
-              
+
               if (insightsResponse.ok) {
                 const insightsData = await insightsResponse.json() as { data?: any[] };
                 if (insightsData.data) {
@@ -585,7 +590,7 @@ class FacebookDataService implements IFacebookDataService {
               try {
                 const videoUrl = `${FACEBOOK_API_BASE_URL}/${post.id}?fields=video_insights&access_token=${accessToken}`;
                 const videoResponse = await fetch(videoUrl);
-                
+
                 if (videoResponse.ok) {
                   const videoData = await videoResponse.json() as any;
                   if (videoData.video_insights?.data) {

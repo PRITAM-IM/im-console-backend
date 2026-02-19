@@ -10,6 +10,7 @@ export interface IMetaAdsDataService {
   getAgeGenderBreakdown(accountId: string, accessToken: string, dateRange: { startDate: string; endDate: string }): Promise<any[]>;
   getPlatformBreakdown(accountId: string, accessToken: string, dateRange: { startDate: string; endDate: string }): Promise<any[]>;
   getDailyBreakdown(accountId: string, accessToken: string, dateRange: { startDate: string; endDate: string }): Promise<any[]>;
+  getAccountBalance(accountId: string, accessToken: string): Promise<any>;
 }
 
 class MetaAdsDataService implements IMetaAdsDataService {
@@ -20,15 +21,19 @@ class MetaAdsDataService implements IMetaAdsDataService {
       throw new Error('Meta Ads connection not found for this project');
     }
 
-    // Check if access token is expired or about to expire (within 5 minutes)
-    const now = new Date();
-    const expiresAt = connection.expiresAt || new Date(0);
-    const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+    // Refresh proactively 5 minutes before expiry to avoid edge-of-expiry failures.
+    const now = Date.now();
+    const expiryBufferMs = 5 * 60 * 1000;
+    const expiresAtMs = connection.expiresAt ? new Date(connection.expiresAt).getTime() : 0;
+    if (connection.accessToken && expiresAtMs - now > expiryBufferMs) {
+      return connection.accessToken;
+    }
 
-    if (!connection.accessToken || expiresAt < fiveMinutesFromNow) {
+    // Refresh access token
+    if (connection.refreshToken) {
       console.log('[Meta Ads Data Service] Access token expired or missing, refreshing...');
       const { accessToken, expiresAt: newExpiresAt } = await metaAdsAuthService.refreshAccessToken(connection.refreshToken);
-      
+
       // Update connection with new token
       connection.accessToken = accessToken;
       connection.expiresAt = newExpiresAt ?? undefined;
@@ -37,7 +42,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
       return accessToken;
     }
 
-    return connection.accessToken;
+    throw new Error('Unable to obtain valid access token');
   }
 
   public async getInsights(
@@ -47,10 +52,10 @@ class MetaAdsDataService implements IMetaAdsDataService {
   ): Promise<any> {
     console.log(`[Meta Ads Data Service] Fetching insights for account: ${accountId}`);
     console.log(`[Meta Ads Data Service] Date range: ${dateRange.startDate} to ${dateRange.endDate}`);
-    
+
     // Format account ID - ensure it has act_ prefix
     const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
-    
+
     // Fields to request from Meta Ads API
     const fields = [
       'impressions',
@@ -77,27 +82,27 @@ class MetaAdsDataService implements IMetaAdsDataService {
       console.log(`[Meta Ads Data Service] Fetching from URL: ${url.substring(0, 100)}...`);
 
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Meta Ads Data Service] Error response:`, errorText);
-        
+
         // Try to parse error for better message
         try {
           const errorJson = JSON.parse(errorText);
           const errorCode = errorJson.error?.code;
           const errorMessage = errorJson.error?.message || errorText;
-          
+
           // Handle rate limiting
           if (errorCode === 4 || errorCode === 17 || errorMessage.includes('request limit')) {
             throw new Error('Meta Ads API rate limit reached. Please wait a few minutes and try again.');
           }
-          
+
           // Handle permission errors
           if (errorCode === 200 || errorCode === 190) {
             throw new Error('Meta Ads permission error. Please reconnect your Meta Ads account.');
           }
-          
+
           throw new Error(`Meta Ads API error: ${errorMessage}`);
         } catch (parseError: any) {
           if (parseError.message.includes('Meta Ads')) {
@@ -108,7 +113,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
       }
 
       const data = await response.json() as { data?: any[] };
-      
+
       // Process the insights data
       const result = {
         impressions: 0,
@@ -127,7 +132,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
 
       if (data.data && data.data.length > 0) {
         const insight = data.data[0];
-        
+
         result.impressions = parseInt(insight.impressions || '0', 10);
         result.clicks = parseInt(insight.clicks || '0', 10);
         result.spend = parseFloat(insight.spend || '0');
@@ -136,25 +141,25 @@ class MetaAdsDataService implements IMetaAdsDataService {
         result.cpc = parseFloat(insight.cpc || '0');
         result.cpm = parseFloat(insight.cpm || '0');
         result.frequency = parseFloat(insight.frequency || '0');
-        
+
         // Process actions to get conversions
         if (insight.actions && Array.isArray(insight.actions)) {
           // Find conversion-related actions
-          const conversionActions = insight.actions.filter((a: any) => 
-            a.action_type === 'purchase' || 
-            a.action_type === 'lead' || 
+          const conversionActions = insight.actions.filter((a: any) =>
+            a.action_type === 'purchase' ||
+            a.action_type === 'lead' ||
             a.action_type === 'complete_registration' ||
             a.action_type === 'omni_purchase' ||
             a.action_type === 'onsite_conversion.purchase'
           );
-          
-          result.conversions = conversionActions.reduce((sum: number, a: any) => 
+
+          result.conversions = conversionActions.reduce((sum: number, a: any) =>
             sum + parseInt(a.value || '0', 10), 0
           );
-          
+
           // If no specific conversions, use total actions
           if (result.conversions === 0) {
-            result.actions = insight.actions.reduce((sum: number, a: any) => 
+            result.actions = insight.actions.reduce((sum: number, a: any) =>
               sum + parseInt(a.value || '0', 10), 0
             );
           }
@@ -162,12 +167,12 @@ class MetaAdsDataService implements IMetaAdsDataService {
 
         // Process cost per action for conversions
         if (insight.cost_per_action_type && Array.isArray(insight.cost_per_action_type)) {
-          const costPerConversion = insight.cost_per_action_type.find((c: any) => 
-            c.action_type === 'purchase' || 
-            c.action_type === 'lead' || 
+          const costPerConversion = insight.cost_per_action_type.find((c: any) =>
+            c.action_type === 'purchase' ||
+            c.action_type === 'lead' ||
             c.action_type === 'omni_purchase'
           );
-          
+
           if (costPerConversion) {
             result.costPerConversion = parseFloat(costPerConversion.value || '0');
           }
@@ -177,7 +182,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
         if (result.clicks > 0 && result.conversions > 0) {
           result.conversionRate = (result.conversions / result.clicks) * 100;
         }
-        
+
         // Calculate cost per conversion if not provided
         if (result.costPerConversion === 0 && result.conversions > 0 && result.spend > 0) {
           result.costPerConversion = result.spend / result.conversions;
@@ -201,9 +206,9 @@ class MetaAdsDataService implements IMetaAdsDataService {
     dateRange: { startDate: string; endDate: string }
   ): Promise<any[]> {
     console.log(`[Meta Ads Data Service] Fetching campaigns for account: ${accountId}`);
-    
+
     const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
-    
+
     try {
       // First, get campaign list with status
       const campaignsUrl = `${META_ADS_API_BASE_URL}/${formattedAccountId}/campaigns?` +
@@ -213,7 +218,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
 
       const campaignsResponse = await fetch(campaignsUrl);
       let campaignMap: Record<string, any> = {};
-      
+
       if (campaignsResponse.ok) {
         const campaignsData = await campaignsResponse.json() as { data?: any[] };
         if (campaignsData.data) {
@@ -248,7 +253,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
         `access_token=${accessToken}`;
 
       const response = await fetch(insightsUrl);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Meta Ads Data Service] Campaign insights error:`, errorText);
@@ -256,17 +261,17 @@ class MetaAdsDataService implements IMetaAdsDataService {
       }
 
       const data = await response.json() as { data?: any[] };
-      
+
       const campaigns = (data.data || []).map((c: any) => {
         // Calculate conversions from actions
         let conversions = 0;
         if (c.actions && Array.isArray(c.actions)) {
-          const conversionActions = c.actions.filter((a: any) => 
-            a.action_type === 'purchase' || 
-            a.action_type === 'lead' || 
+          const conversionActions = c.actions.filter((a: any) =>
+            a.action_type === 'purchase' ||
+            a.action_type === 'lead' ||
             a.action_type === 'omni_purchase'
           );
-          conversions = conversionActions.reduce((sum: number, a: any) => 
+          conversions = conversionActions.reduce((sum: number, a: any) =>
             sum + parseInt(a.value || '0', 10), 0
           );
         }
@@ -307,9 +312,9 @@ class MetaAdsDataService implements IMetaAdsDataService {
     dateRange: { startDate: string; endDate: string }
   ): Promise<any[]> {
     console.log(`[Meta Ads Data Service] Fetching age/gender breakdown`);
-    
+
     const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
-    
+
     try {
       const url = `${META_ADS_API_BASE_URL}/${formattedAccountId}/insights?` +
         `fields=impressions,clicks,spend,reach&` +
@@ -319,7 +324,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
         `access_token=${accessToken}`;
 
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Meta Ads Data Service] Age/Gender error:`, errorText);
@@ -327,7 +332,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
       }
 
       const data = await response.json() as { data?: any[] };
-      
+
       const breakdown = (data.data || []).map((item: any) => ({
         age: item.age || 'Unknown',
         gender: item.gender || 'Unknown',
@@ -354,9 +359,9 @@ class MetaAdsDataService implements IMetaAdsDataService {
     dateRange: { startDate: string; endDate: string }
   ): Promise<any[]> {
     console.log(`[Meta Ads Data Service] Fetching platform breakdown`);
-    
+
     const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
-    
+
     try {
       const url = `${META_ADS_API_BASE_URL}/${formattedAccountId}/insights?` +
         `fields=impressions,clicks,spend,reach,ctr,cpc&` +
@@ -366,7 +371,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
         `access_token=${accessToken}`;
 
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Meta Ads Data Service] Platform error:`, errorText);
@@ -374,7 +379,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
       }
 
       const data = await response.json() as { data?: any[] };
-      
+
       const platformNames: Record<string, string> = {
         'facebook': 'Facebook',
         'instagram': 'Instagram',
@@ -409,9 +414,9 @@ class MetaAdsDataService implements IMetaAdsDataService {
     dateRange: { startDate: string; endDate: string }
   ): Promise<any[]> {
     console.log(`[Meta Ads Data Service] Fetching daily breakdown`);
-    
+
     const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
-    
+
     try {
       const url = `${META_ADS_API_BASE_URL}/${formattedAccountId}/insights?` +
         `fields=impressions,clicks,spend,reach,ctr,cpc,cpm&` +
@@ -421,7 +426,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
         `access_token=${accessToken}`;
 
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`[Meta Ads Data Service] Daily error:`, errorText);
@@ -429,7 +434,7 @@ class MetaAdsDataService implements IMetaAdsDataService {
       }
 
       const data = await response.json() as { data?: any[] };
-      
+
       const dailyData = (data.data || []).map((item: any) => ({
         date: item.date_start,
         impressions: parseInt(item.impressions || '0', 10),
@@ -447,6 +452,125 @@ class MetaAdsDataService implements IMetaAdsDataService {
       console.error(`[Meta Ads Data Service] Daily error:`, error.message);
       return [];
     }
+  }
+
+  /**
+   * Get account balance and funding information
+   * Fetches available funds, account balance, and daily spending limit
+   */
+  public async getAccountBalance(
+    accountId: string,
+    accessToken: string
+  ): Promise<any> {
+    console.log(`[Meta Ads Data Service] Fetching account balance for: ${accountId}`);
+
+    const formattedAccountId = accountId.startsWith('act_') ? accountId : `act_${accountId}`;
+
+    try {
+      // Fields to request for account balance information
+      const fields = [
+        'name',                       // Account name
+        'balance',                    // Current account balance
+        'account_status',             // Account status (1=ACTIVE, 2=DISABLED, etc.)
+        'amount_spent',               // Total amount spent
+        'spend_cap',                  // Spending limit cap
+        'min_daily_budget',           // Minimum daily budget
+        'currency',                   // Account currency
+        'funding_source_details',     // Payment method details
+      ].join(',');
+
+      const url = `${META_ADS_API_BASE_URL}/${formattedAccountId}?` +
+        `fields=${fields}&` +
+        `access_token=${accessToken}`;
+
+      console.log(`[Meta Ads Data Service] Fetching balance from URL: ${url.substring(0, 100)}...`);
+
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[Meta Ads Data Service] Balance error:`, errorText);
+
+        try {
+          const errorJson = JSON.parse(errorText);
+          const errorCode = errorJson.error?.code;
+          const errorMessage = errorJson.error?.message || errorText;
+
+          if (errorCode === 4 || errorCode === 17 || errorMessage.includes('request limit')) {
+            throw new Error('Meta Ads API rate limit reached. Please wait a few minutes and try again.');
+          }
+
+          if (errorCode === 200 || errorCode === 190) {
+            throw new Error('Meta Ads permission error. Please reconnect your Meta Ads account.');
+          }
+
+          throw new Error(`Meta Ads API error: ${errorMessage}`);
+        } catch (parseError: any) {
+          if (parseError.message.includes('Meta Ads')) {
+            throw parseError;
+          }
+          throw new Error(`Meta Ads API error: ${response.status} - ${errorText.substring(0, 200)}`);
+        }
+      }
+
+      const data = await response.json() as any;
+
+      // Extract actual available balance from funding source details
+      // Meta returns the real available balance in fundingSourceDetails.display_string
+      // Format: "Available balance (₹49,811.86 INR)" or "Available balance ($500.00 USD)"
+      let availableBalance = parseFloat(data.balance || '0') / 100;
+
+      if (data.funding_source_details?.display_string) {
+        const displayString = data.funding_source_details.display_string;
+        // Extract number from string like "Available balance (₹49,811.86 INR)"
+        const balanceMatch = displayString.match(/[\d,]+\.?\d*/);
+        if (balanceMatch) {
+          const balanceStr = balanceMatch[0].replace(/,/g, ''); // Remove commas
+          availableBalance = parseFloat(balanceStr);
+        }
+      }
+
+      // Process the balance data
+      const result = {
+        accountId: data.id || formattedAccountId,
+        accountName: data.name || 'Unknown Account',
+        currency: data.currency || 'USD',
+        balance: availableBalance, // Use the actual available balance
+        accountBalance: parseFloat(data.balance || '0') / 100, // Original account balance
+        accountStatus: data.account_status || 1,
+        accountStatusText: this.getAccountStatusText(data.account_status),
+        amountSpent: parseFloat(data.amount_spent || '0') / 100,
+        spendCap: data.spend_cap ? parseFloat(data.spend_cap) / 100 : null,
+        minDailyBudget: data.min_daily_budget ? parseFloat(data.min_daily_budget) / 100 : null,
+        fundingSourceDetails: data.funding_source_details || null,
+      };
+
+      console.log(`[Meta Ads Data Service] Account balance retrieved:`, result);
+      return result;
+    } catch (error: any) {
+      console.error(`[Meta Ads Data Service] Balance error:`, error.message);
+      throw new Error(`Failed to fetch Meta Ads account balance: ${error.message}`);
+    }
+  }
+
+  /**
+   * Helper method to convert account status code to text
+   */
+  private getAccountStatusText(status: number): string {
+    const statusMap: Record<number, string> = {
+      1: 'ACTIVE',
+      2: 'DISABLED',
+      3: 'UNSETTLED',
+      7: 'PENDING_RISK_REVIEW',
+      8: 'PENDING_SETTLEMENT',
+      9: 'IN_GRACE_PERIOD',
+      100: 'PENDING_CLOSURE',
+      101: 'CLOSED',
+      201: 'ANY_ACTIVE',
+      202: 'ANY_CLOSED',
+    };
+
+    return statusMap[status] || 'UNKNOWN';
   }
 }
 

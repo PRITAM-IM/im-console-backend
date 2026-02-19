@@ -60,18 +60,23 @@ class LinkedInAuthService implements ILinkedInAuthService {
       }
 
       const projectObjectId = new Types.ObjectId(projectId);
-      
-      // Remove existing connection if it exists
-      const deleteResult = await LinkedInConnection.deleteMany({ projectId: projectObjectId });
-      console.log(`[LinkedIn Auth Service] Deleted ${deleteResult.deletedCount} existing connection(s)`);
+      const existingConnection = await LinkedInConnection.findOne({ projectId: projectObjectId });
+      const effectiveRefreshToken = refreshToken || existingConnection?.refreshToken;
 
-      // Create new connection
-      const connection = await LinkedInConnection.create({
-        projectId: projectObjectId,
-        accessToken,
-        refreshToken,
-        expiresAt,
-      });
+      let connection: ILinkedInConnection;
+      if (existingConnection) {
+        existingConnection.accessToken = accessToken;
+        existingConnection.refreshToken = effectiveRefreshToken;
+        existingConnection.expiresAt = expiresAt ?? undefined;
+        connection = await existingConnection.save();
+      } else {
+        connection = await LinkedInConnection.create({
+          projectId: projectObjectId,
+          accessToken,
+          refreshToken: effectiveRefreshToken,
+          expiresAt,
+        });
+      }
 
       console.log(`[LinkedIn Auth Service] Connection created successfully - ID: ${connection._id}`);
       

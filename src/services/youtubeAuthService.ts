@@ -60,18 +60,27 @@ class YouTubeAuthService implements IYouTubeAuthService {
       }
 
       const projectObjectId = new Types.ObjectId(projectId);
-      
-      // Remove existing connection if it exists
-      const deleteResult = await YouTubeConnection.deleteMany({ projectId: projectObjectId });
-      console.log(`[YouTube Auth Service] Deleted ${deleteResult.deletedCount} existing connection(s)`);
+      const existingConnection = await YouTubeConnection.findOne({ projectId: projectObjectId });
+      const effectiveRefreshToken = refreshToken || existingConnection?.refreshToken;
 
-      // Create new connection
-      const connection = await YouTubeConnection.create({
-        projectId: projectObjectId,
-        refreshToken,
-        accessToken,
-        expiresAt,
-      });
+      if (!effectiveRefreshToken) {
+        throw new Error('Refresh token is missing. Please reconnect YouTube with consent.');
+      }
+
+      let connection: IYouTubeConnection;
+      if (existingConnection) {
+        existingConnection.refreshToken = effectiveRefreshToken;
+        existingConnection.accessToken = accessToken;
+        existingConnection.expiresAt = expiresAt ?? undefined;
+        connection = await existingConnection.save();
+      } else {
+        connection = await YouTubeConnection.create({
+          projectId: projectObjectId,
+          refreshToken: effectiveRefreshToken,
+          accessToken,
+          expiresAt,
+        });
+      }
 
       console.log(`[YouTube Auth Service] Connection created successfully - ID: ${connection._id}`);
       
@@ -157,4 +166,3 @@ class YouTubeAuthService implements IYouTubeAuthService {
 }
 
 export default new YouTubeAuthService();
-

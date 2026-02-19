@@ -55,18 +55,27 @@ class GoogleSearchConsoleAuthService implements IGoogleSearchConsoleAuthService 
       }
 
       const projectObjectId = new Types.ObjectId(projectId);
-      
-      // Remove existing connection if it exists
-      const deleteResult = await GoogleSearchConsoleConnection.deleteMany({ projectId: projectObjectId });
-      console.log(`[Google Search Console Auth Service] Deleted ${deleteResult.deletedCount} existing connection(s)`);
+      const existingConnection = await GoogleSearchConsoleConnection.findOne({ projectId: projectObjectId });
+      const effectiveRefreshToken = refreshToken || existingConnection?.refreshToken;
 
-      // Create new connection
-      const connection = await GoogleSearchConsoleConnection.create({
-        projectId: projectObjectId,
-        refreshToken,
-        accessToken,
-        expiresAt,
-      });
+      if (!effectiveRefreshToken) {
+        throw new Error('Refresh token is missing. Please reconnect Google Search Console with consent.');
+      }
+
+      let connection: IGoogleSearchConsoleConnection;
+      if (existingConnection) {
+        existingConnection.refreshToken = effectiveRefreshToken;
+        existingConnection.accessToken = accessToken;
+        existingConnection.expiresAt = expiresAt ?? undefined;
+        connection = await existingConnection.save();
+      } else {
+        connection = await GoogleSearchConsoleConnection.create({
+          projectId: projectObjectId,
+          refreshToken: effectiveRefreshToken,
+          accessToken,
+          expiresAt,
+        });
+      }
 
       console.log(`[Google Search Console Auth Service] Connection created successfully - ID: ${connection._id}`);
       
