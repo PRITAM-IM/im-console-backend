@@ -2,9 +2,8 @@ import { ENV } from '../config/env';
 import googleAdsAuthService from './googleAdsAuthService';
 import { IGoogleAdsConnection } from '../models/GoogleAdsConnection';
 
-// Google Ads API v19 (updated from v18 - v18 has deprecation issues)
-// Note: v18 sunsets August 2025, v19 is more stable for current use
-const GOOGLE_ADS_API_VERSION = 'v19';
+// Google Ads API v23
+const GOOGLE_ADS_API_VERSION = 'v23';
 const GOOGLE_ADS_API_BASE_URL = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}`;
 
 export interface IGoogleAdsDataService {

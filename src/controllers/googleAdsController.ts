@@ -658,7 +658,7 @@ export const diagnoseGoogleAds = asyncHandler(async (req: Request, res: Response
 
     // Test 1: List Accessible Customers (this doesn't need login-customer-id)
     try {
-      const listUrl = 'https://googleads.googleapis.com/v19/customers:listAccessibleCustomers';
+      const listUrl = 'https://googleads.googleapis.com/v23/customers:listAccessibleCustomers';
       const listResponse = await fetch(listUrl, {
         method: 'GET',
         headers: {
@@ -681,7 +681,7 @@ export const diagnoseGoogleAds = asyncHandler(async (req: Request, res: Response
     if (ENV.GOOGLE_ADS_LOGIN_CUSTOMER_ID) {
       try {
         const managerId = ENV.GOOGLE_ADS_LOGIN_CUSTOMER_ID.replace(/-/g, '');
-        const managerUrl = `https://googleads.googleapis.com/v19/customers/${managerId}/googleAds:search`;
+        const managerUrl = `https://googleads.googleapis.com/v23/customers/${managerId}/googleAds:search`;
         const query = 'SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1';
 
         const managerResponse = await fetch(managerUrl, {
@@ -713,7 +713,7 @@ export const diagnoseGoogleAds = asyncHandler(async (req: Request, res: Response
         const loginId = ENV.GOOGLE_ADS_LOGIN_CUSTOMER_ID
           ? ENV.GOOGLE_ADS_LOGIN_CUSTOMER_ID.replace(/-/g, '')
           : clientId;
-        const clientUrl = `https://googleads.googleapis.com/v19/customers/${clientId}/googleAds:search`;
+        const clientUrl = `https://googleads.googleapis.com/v23/customers/${clientId}/googleAds:search`;
         const query = 'SELECT customer.id, customer.descriptive_name FROM customer LIMIT 1';
 
         const clientResponse = await fetch(clientUrl, {
@@ -753,4 +753,3 @@ export const diagnoseGoogleAds = asyncHandler(async (req: Request, res: Response
     });
   }
 });
-

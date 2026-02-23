@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema, Model } from 'mongoose';
+import mongoose, { Document, Model, Schema } from 'mongoose';
 
 export interface IYouTubeConnection extends Document {
   projectId: mongoose.Types.ObjectId;
@@ -33,14 +33,10 @@ const youTubeConnectionSchema: Schema<IYouTubeConnection> = new Schema(
   }
 );
 
-// Note: We don't use TTL index on expiresAt because:
-// - expiresAt is for the access token (short-lived, ~1 hour)
-// - The connection should persist because it contains a refresh token
-// - Refresh tokens can be used to obtain new access tokens indefinitely
-// - The code already handles token refresh in youTubeDataService.getAccessToken()
-
-const YouTubeConnection: Model<IYouTubeConnection> = mongoose.model<IYouTubeConnection>('YouTubeConnection', youTubeConnectionSchema);
+const YouTubeConnection: Model<IYouTubeConnection> = mongoose.model<IYouTubeConnection>(
+  'YouTubeConnection',
+  youTubeConnectionSchema
+);
 
 export default YouTubeConnection;
-
 

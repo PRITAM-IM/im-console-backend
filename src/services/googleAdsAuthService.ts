@@ -153,7 +153,7 @@ class GoogleAdsAuthService implements IGoogleAdsAuthService {
 
       // Step 1: List accessible customers using Google Ads API REST endpoint
       // Per Google Ads API docs: login-customer-id is NOT required for this endpoint
-      const listCustomersUrl = 'https://googleads.googleapis.com/v19/customers:listAccessibleCustomers';
+      const listCustomersUrl = 'https://googleads.googleapis.com/v23/customers:listAccessibleCustomers';
 
       console.log('[Google Ads Auth Service] Calling listAccessibleCustomers...');
       console.log('[Google Ads Auth Service] Developer token (masked):', ENV.GOOGLE_ADS_DEVELOPER_TOKEN.substring(0, 8) + '...');
@@ -203,7 +203,7 @@ class GoogleAdsAuthService implements IGoogleAdsAuthService {
           console.log(`[Google Ads Auth Service] Processing customer ${customerId}...`);
 
           // Query customer details - for direct access, login-customer-id should be the same as customer being queried
-          const searchUrl = `https://googleads.googleapis.com/v19/customers/${customerId}/googleAds:search`;
+          const searchUrl = `https://googleads.googleapis.com/v23/customers/${customerId}/googleAds:search`;
 
           const customerQuery = `
             SELECT
