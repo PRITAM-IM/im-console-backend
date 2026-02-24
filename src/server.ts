@@ -13,30 +13,28 @@ async function initializeServices() {
 
     // Initialize Pinecone index (only if API key is configured)
     if (ENV.PINECONE_API_KEY) {
-      console.log('🔮 Initializing Pinecone vector database...');
+      console.log('[Pinecone] Initializing vector database...');
       await initializePineconeIndex();
-      console.log('✅ Pinecone initialized - RAG is enabled');
+      console.log('[Pinecone] Initialized - RAG is enabled');
     } else {
-      console.log('⚠️  Pinecone API key not configured - RAG will fall back to traditional context');
+      console.log('[Pinecone] API key not configured - RAG will fall back to traditional context');
     }
 
-    // Start balance alert worker (only in local development, not on Vercel)
-    // On Vercel, use external cron service to trigger /api/balance-alerts/scan
-    const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
-
-    if (!isVercel && ENV.NODE_ENV !== 'production') {
+    // Start balance alert worker (Railway persistent server - always attempt to start)
+    // Worker internally checks BALANCE_ALERT_ENABLED=true, TWOCHAT_API_KEY, TWOCHAT_WHATSAPP_GROUP_ID
+    if (process.env.BALANCE_ALERT_ENABLED === 'true') {
       try {
         const balanceAlertWorker = (await import('./workers/balanceAlertWorker')).default;
         balanceAlertWorker.start();
-        console.log('✅ Balance alert worker started (local development mode)');
+        console.log('[Balance Alert Worker] Started successfully on Railway');
       } catch (error: any) {
-        console.log('⚠️  Balance alert worker not started:', error.message);
+        console.error('[Balance Alert Worker] Failed to start:', error.message);
       }
     } else {
-      console.log('ℹ️  Balance alert worker disabled (use external cron service on production/Vercel)');
+      console.log('[Balance Alert Worker] Disabled — set BALANCE_ALERT_ENABLED=true in Railway env vars to enable');
     }
   } catch (error: any) {
-    console.error('❌ Error initializing services:', error.message);
+    console.error('[Startup] Error initializing services:', error.message);
     // Don't exit - allow server to run with traditional context if Pinecone fails
   }
 }
