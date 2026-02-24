@@ -45,10 +45,10 @@ const executeSearchAnalyticsQuery = async (
   // For URL prefix properties, use the full URL
   const encodedSiteUrl = encodeURIComponent(siteUrl);
   const url = `${SEARCH_CONSOLE_API_BASE}/sites/${encodedSiteUrl}/searchAnalytics/query`;
-  
+
   console.log(`[Search Console API] Querying: ${siteUrl}`);
   console.log(`[Search Console API] Request:`, JSON.stringify(requestBody, null, 2));
-  
+
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -126,7 +126,9 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
   public async getAccessToken(projectId: string): Promise<string> {
     const connection = await googleSearchConsoleAuthService.getConnectionByProject(projectId);
     if (!connection) {
-      throw new Error('Google Search Console connection not found for this project');
+      const err: any = new Error('Google Search Console is not connected. Please reconnect.');
+      err.code = 'TOKEN_EXPIRED';
+      throw err;
     }
 
     const now = Date.now();
@@ -137,14 +139,23 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
     }
 
     if (connection.refreshToken) {
-      const { accessToken, expiresAt } = await googleSearchConsoleAuthService.refreshAccessToken(connection.refreshToken);
-      connection.accessToken = accessToken;
-      connection.expiresAt = expiresAt || undefined;
-      await connection.save();
-      return accessToken;
+      try {
+        const { accessToken, expiresAt } = await googleSearchConsoleAuthService.refreshAccessToken(connection.refreshToken);
+        connection.accessToken = accessToken;
+        connection.expiresAt = expiresAt || undefined;
+        await connection.save();
+        return accessToken;
+      } catch (refreshError: any) {
+        console.error('[GSC] Token refresh failed — user must reconnect:', refreshError.message);
+        const err: any = new Error('Google Search Console session expired. Please reconnect.');
+        err.code = 'TOKEN_EXPIRED';
+        throw err;
+      }
     }
 
-    throw new Error('Unable to obtain valid access token');
+    const err: any = new Error('Google Search Console session expired. Please reconnect.');
+    err.code = 'TOKEN_EXPIRED';
+    throw err;
   }
 
   public async getSearchAnalytics(
@@ -154,7 +165,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
   ): Promise<any> {
     console.log(`[Search Console Data Service] Fetching search analytics for: ${siteUrl}`);
     console.log(`[Search Console Data Service] Date range: ${dateRange.startDate} to ${dateRange.endDate}`);
-    
+
     const requestBody = {
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
@@ -165,7 +176,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
 
     try {
       const data = await executeSearchAnalyticsQuery(siteUrl, accessToken, requestBody);
-      
+
       if (!data.rows || data.rows.length === 0) {
         return {
           clicks: 0,
@@ -194,7 +205,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
     dateRange: { startDate: string; endDate: string }
   ): Promise<any> {
     console.log(`[Search Console Data Service] Fetching top queries for: ${siteUrl}`);
-    
+
     const requestBody = {
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
@@ -205,7 +216,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
 
     try {
       const data = await executeSearchAnalyticsQuery(siteUrl, accessToken, requestBody);
-      
+
       if (!data.rows) {
         return [];
       }
@@ -229,7 +240,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
     dateRange: { startDate: string; endDate: string }
   ): Promise<any> {
     console.log(`[Search Console Data Service] Fetching top pages for: ${siteUrl}`);
-    
+
     const requestBody = {
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
@@ -240,7 +251,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
 
     try {
       const data = await executeSearchAnalyticsQuery(siteUrl, accessToken, requestBody);
-      
+
       if (!data.rows) {
         return [];
       }
@@ -255,7 +266,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
         } catch {
           // If URL parsing fails, use the original
         }
-        
+
         return {
           page: page,
           fullUrl: fullUrl,
@@ -277,7 +288,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
     dateRange: { startDate: string; endDate: string }
   ): Promise<any> {
     console.log(`[Search Console Data Service] Fetching countries for: ${siteUrl}`);
-    
+
     const requestBody = {
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
@@ -288,7 +299,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
 
     try {
       const data = await executeSearchAnalyticsQuery(siteUrl, accessToken, requestBody);
-      
+
       if (!data.rows) {
         return [];
       }
@@ -316,7 +327,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
     dateRange: { startDate: string; endDate: string }
   ): Promise<any> {
     console.log(`[Search Console Data Service] Fetching devices for: ${siteUrl}`);
-    
+
     const requestBody = {
       startDate: dateRange.startDate,
       endDate: dateRange.endDate,
@@ -327,7 +338,7 @@ class GoogleSearchConsoleDataService implements IGoogleSearchConsoleDataService 
 
     try {
       const data = await executeSearchAnalyticsQuery(siteUrl, accessToken, requestBody);
-      
+
       if (!data.rows) {
         return [];
       }

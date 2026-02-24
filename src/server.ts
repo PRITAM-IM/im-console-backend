@@ -33,15 +33,6 @@ async function initializeServices() {
     } else {
       console.log('[Balance Alert Worker] Disabled — set BALANCE_ALERT_ENABLED=true in Railway env vars to enable');
     }
-
-    // Start token refresh worker — proactively refreshes all Google OAuth access tokens
-    // every 45 minutes so users never see "Session Expired" warnings.
-    try {
-      const tokenRefreshWorker = (await import('./workers/tokenRefreshWorker')).default;
-      tokenRefreshWorker.start();
-    } catch (error: any) {
-      console.error('[Token Refresh Worker] Failed to start:', error.message);
-    }
   } catch (error: any) {
     console.error('[Startup] Error initializing services:', error.message);
     // Don't exit - allow server to run with traditional context if Pinecone fails

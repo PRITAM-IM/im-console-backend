@@ -5,23 +5,33 @@ import asyncHandler from 'express-async-handler';
 import googleSearchConsoleDataService from '../services/googleSearchConsoleDataService';
 import { googleSearchConsoleOauth2Client } from '../config/googleSearchConsole';
 
+// Helper to send token-expiry-aware error responses
+const sendError = (res: Response, error: any) => {
+  const status = error.code === 'TOKEN_EXPIRED' ? 401 : 400;
+  res.status(status).json({
+    success: false,
+    error: error.message,
+    errorCode: error.code || null,
+  });
+};
+
 export const initiateAuth = asyncHandler(async (req: Request, res: Response): Promise<void> => {
   try {
     const { projectId } = req.query;
     const state = projectId ? String(projectId) : undefined;
-    
+
     console.log(`[Google Search Console Initiate Auth] ===== BACKEND OAuth URL Generation =====`);
     console.log(`[Google Search Console Initiate Auth] Request received from: ${req.headers.origin || 'unknown'}`);
     console.log(`[Google Search Console Initiate Auth] Project ID: ${projectId}`);
     console.log(`[Google Search Console Initiate Auth] State: ${state}`);
-    
+
     // Verify redirect URI configuration
     const redirectUri = process.env.GOOGLE_SEARCH_CONSOLE_REDIRECT_URL || 'http://localhost:3000/api/gsc/callback';
     console.log(`[Google Search Console Initiate Auth] Redirect URI from env: ${redirectUri}`);
-    
+
     // Generate auth URL from backend (this is the ONLY place URL should be generated)
     const authUrl = googleSearchConsoleAuthService.generateAuthUrl(state);
-    
+
     // Extract redirect_uri from generated URL to verify
     const redirectUriMatch = authUrl.match(/redirect_uri=([^&]+)/);
     if (redirectUriMatch) {
@@ -31,10 +41,10 @@ export const initiateAuth = asyncHandler(async (req: Request, res: Response): Pr
     } else {
       console.error(`[Google Search Console Initiate Auth] ✗ ERROR: redirect_uri not found in generated URL!`);
     }
-    
+
     console.log(`[Google Search Console Initiate Auth] Full auth URL (first 200 chars): ${authUrl.substring(0, 200)}...`);
     console.log(`[Google Search Console Initiate Auth] ==========================================`);
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -57,7 +67,7 @@ export const handleCallbackGet = asyncHandler(async (req: Request, res: Response
   console.log(`[Google Search Console OAuth Callback] Query params:`, req.query);
   console.log(`[Google Search Console OAuth Callback] Full URL:`, req.url);
   console.log(`[Google Search Console OAuth Callback] Expected redirect URI: ${process.env.GOOGLE_SEARCH_CONSOLE_REDIRECT_URL || 'http://localhost:3000/api/gsc/callback'}`);
-  
+
   const { code, state, error } = req.query;
 
   if (error) {
@@ -74,7 +84,7 @@ export const handleCallbackGet = asyncHandler(async (req: Request, res: Response
 
   try {
     console.log(`[Google Search Console OAuth Callback] Processing callback for project: ${projectId}`);
-    
+
     // Handle OAuth callback
     const { accessToken, refreshToken, expiresAt } = await googleSearchConsoleAuthService.handleCallback(String(code));
     console.log(`[Google Search Console OAuth Callback] Tokens received - Access token: ${accessToken ? 'Yes' : 'No'}, Refresh token: ${refreshToken ? 'Yes' : 'No'}`);
@@ -116,7 +126,7 @@ export const handleCallback = asyncHandler(async (req: Request, res: Response): 
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     // Verify project belongs to user
     const project = await projectService.getProjectById(projectId, userId);
     if (!project) {
@@ -161,7 +171,7 @@ export const saveSearchConsoleSite = asyncHandler(async (req: Request, res: Resp
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     // Verify project belongs to user
     const project = await projectService.getProjectById(projectId, userId);
     if (!project) {
@@ -186,7 +196,7 @@ export const saveSearchConsoleSite = asyncHandler(async (req: Request, res: Resp
     }
 
     const projectData = updatedProject.toObject ? updatedProject.toObject() : updatedProject;
-    
+
     res.status(200).json({
       success: true,
       data: {
@@ -216,7 +226,7 @@ export const getSearchConsoleSites = asyncHandler(async (req: Request, res: Resp
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project) {
       res.status(404).json({
@@ -237,10 +247,7 @@ export const getSearchConsoleSites = asyncHandler(async (req: Request, res: Resp
       data: sites,
     });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      error: error.message,
-    });
+    sendError(res, error);
   }
 });
 
@@ -267,7 +274,7 @@ export const getSearchConsoleOverview = asyncHandler(async (req: Request, res: R
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project) {
       res.status(404).json({
@@ -301,10 +308,7 @@ export const getSearchConsoleOverview = asyncHandler(async (req: Request, res: R
       data: overview,
     });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      error: error.message,
-    });
+    sendError(res, error);
   }
 });
 
@@ -323,7 +327,7 @@ export const getSearchConsoleQueries = asyncHandler(async (req: Request, res: Re
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project || !project.searchConsoleSiteUrl) {
       res.status(404).json({
@@ -349,10 +353,7 @@ export const getSearchConsoleQueries = asyncHandler(async (req: Request, res: Re
       data: queries,
     });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      error: error.message,
-    });
+    sendError(res, error);
   }
 });
 
@@ -371,7 +372,7 @@ export const getSearchConsolePages = asyncHandler(async (req: Request, res: Resp
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project || !project.searchConsoleSiteUrl) {
       res.status(404).json({
@@ -397,10 +398,7 @@ export const getSearchConsolePages = asyncHandler(async (req: Request, res: Resp
       data: pages,
     });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      error: error.message,
-    });
+    sendError(res, error);
   }
 });
 
@@ -419,7 +417,7 @@ export const getSearchConsoleCountries = asyncHandler(async (req: Request, res: 
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project || !project.searchConsoleSiteUrl) {
       res.status(404).json({
@@ -445,10 +443,7 @@ export const getSearchConsoleCountries = asyncHandler(async (req: Request, res: 
       data: countries,
     });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      error: error.message,
-    });
+    sendError(res, error);
   }
 });
 
@@ -467,7 +462,7 @@ export const getSearchConsoleDevices = asyncHandler(async (req: Request, res: Re
   try {
     // @ts-ignore
     const userId = req.user._id.toString();
-    
+
     const project = await projectService.getProjectById(projectId, userId);
     if (!project || !project.searchConsoleSiteUrl) {
       res.status(404).json({
@@ -493,10 +488,6 @@ export const getSearchConsoleDevices = asyncHandler(async (req: Request, res: Re
       data: devices,
     });
   } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      error: error.message,
-    });
+    sendError(res, error);
   }
 });
-
